@@ -32,7 +32,8 @@ Warte, bis Nextcloud bereit ist (erster Start kann 1–2 Minuten dauern):
 
 ```bash
 docker compose ps
-docker compose logs -f app-init
+# App manuell enablen (ohne Profile full):
+docker compose exec -u www-data nextcloud php occ app:enable maildrop
 ```
 
 Danach:
@@ -44,7 +45,7 @@ Danach:
 | GreenMail IMAP | localhost:3143 | `maildrop` / `maildrop` |
 | GreenMail Web | http://localhost:8081 | – |
 
-Die App `maildrop` wird vom Init-Container automatisch aktiviert.
+Mit `docker compose --profile full up -d` starten zusätzlich Cron und `app-init` (Auto-Enable).
 
 ### App konfigurieren
 
