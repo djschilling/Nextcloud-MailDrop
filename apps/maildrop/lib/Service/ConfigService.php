@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\MailDrop\Service;
 
 use OCP\IConfig;
+use OCP\IL10N;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use OCP\Security\ICrypto;
@@ -17,6 +18,7 @@ class ConfigService {
 		private IConfig $config,
 		private ICrypto $crypto,
 		private ILockingProvider $lockingProvider,
+		private IL10N $l10n,
 	) {
 	}
 
@@ -163,7 +165,7 @@ class ConfigService {
 				$mappings[$index]['last_uid'] = 0;
 				$mappings[$index]['uidvalidity'] = 0;
 				$mappings[$index]['last_status'] = 'reset';
-				$mappings[$index]['last_error'] = 'Cursor zurückgesetzt – nächster Abruf prüft ab UID 1.';
+				$mappings[$index]['last_error'] = $this->l10n->t('Cursor reset – next fetch will start from UID 1.');
 				$mappings[$index]['last_run'] = (new \DateTimeImmutable('now'))->format(\DateTimeInterface::ATOM);
 				$this->persistMappingsUnlocked($mappings);
 				return $this->forClient($mappings[$index]);
@@ -246,7 +248,7 @@ class ConfigService {
 	private function persistMappingsUnlocked(array $mappings): void {
 		$encoded = json_encode(array_values($mappings), JSON_UNESCAPED_UNICODE);
 		if ($encoded === false) {
-			throw new \RuntimeException('Mappings konnten nicht serialisiert werden.');
+			throw new \RuntimeException($this->l10n->t('Could not serialize mappings.'));
 		}
 		$this->set(self::MAPPINGS_KEY, $encoded);
 	}
@@ -369,7 +371,7 @@ class ConfigService {
 		if ($host === '' && $user === '' && $this->get('imap_password', '') === '') {
 			$mapping = $this->normalizeMapping([
 				'id' => $this->newId(),
-				'name' => 'Standard',
+				'name' => $this->l10n->t('Default'),
 				'fetch_enabled' => false,
 				'imap_host' => '',
 				'imap_port' => 993,
@@ -389,7 +391,7 @@ class ConfigService {
 
 		$mapping = $this->normalizeMapping([
 			'id' => $this->newId(),
-			'name' => 'Standard',
+			'name' => $this->l10n->t('Default'),
 			'fetch_enabled' => $this->get('fetch_enabled', '0') === '1',
 			'imap_host' => $this->get('imap_host', ''),
 			'imap_port' => (int)$this->get('imap_port', '993'),

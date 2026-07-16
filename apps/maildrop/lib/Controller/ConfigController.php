@@ -9,6 +9,7 @@ use OCA\MailDrop\Service\MailFetchService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserManager;
@@ -20,6 +21,7 @@ class ConfigController extends Controller {
 		private ConfigService $configService,
 		private MailFetchService $mailFetchService,
 		private IUserManager $userManager,
+		private IL10N $l10n,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -76,7 +78,7 @@ class ConfigController extends Controller {
 	public function save(): DataResponse {
 		$mappings = $this->request->getParam('mappings');
 		if (!is_array($mappings)) {
-			return new DataResponse(['message' => 'mappings muss ein Array sein.'], Http::STATUS_BAD_REQUEST);
+			return new DataResponse(['message' => $this->l10n->t('"mappings" must be an array.')], Http::STATUS_BAD_REQUEST);
 		}
 
 		return new DataResponse([
@@ -118,7 +120,7 @@ class ConfigController extends Controller {
 	public function resetCursor(string $id): DataResponse {
 		$mapping = $this->configService->resetMappingCursor($id);
 		if ($mapping === null) {
-			return new DataResponse(['message' => 'Mapping nicht gefunden.'], Http::STATUS_NOT_FOUND);
+			return new DataResponse(['message' => $this->l10n->t('Mapping not found.')], Http::STATUS_NOT_FOUND);
 		}
 		return new DataResponse($mapping);
 	}

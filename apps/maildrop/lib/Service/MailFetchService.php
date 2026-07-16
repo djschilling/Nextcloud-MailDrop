@@ -7,6 +7,7 @@ namespace OCA\MailDrop\Service;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
+use OCP\IL10N;
 use OCP\IUserManager;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -23,6 +24,7 @@ class MailFetchService {
 		private IUserManager $userManager,
 		private ILockingProvider $lockingProvider,
 		private LoggerInterface $logger,
+		private IL10N $l10n,
 	) {
 	}
 
@@ -32,7 +34,7 @@ class MailFetchService {
 	public function testConnection(?string $mappingId = null): array {
 		$mapping = $this->resolveMapping($mappingId);
 		if ($mapping === null) {
-			return ['success' => false, 'message' => 'Kein Mapping gefunden.'];
+			return ['success' => false, 'message' => $this->l10n->t('No mapping found.')];
 		}
 
 		$client = null;
@@ -47,10 +49,9 @@ class MailFetchService {
 			}
 			return [
 				'success' => true,
-				'message' => sprintf(
-					'[%s] Verbindung OK. %d Nachricht(en) im Ordner.',
-					$mapping['name'],
-					$count,
+				'message' => $this->l10n->t(
+					'[%1$s] Connection OK. %2$d message(s) in folder.',
+					[(string)$mapping['name'], $count],
 				),
 			];
 		} catch (\Throwable $e) {
@@ -72,7 +73,7 @@ class MailFetchService {
 			if ($mapping === null) {
 				return [
 					'success' => false,
-					'message' => 'Mapping nicht gefunden.',
+					'message' => $this->l10n->t('Mapping not found.'),
 					'imported' => 0,
 					'skipped' => 0,
 				];
@@ -88,7 +89,7 @@ class MailFetchService {
 		if ($mappings === []) {
 			return [
 				'success' => false,
-				'message' => 'Kein aktives Mapping konfiguriert.',
+				'message' => $this->l10n->t('No active mapping configured.'),
 				'imported' => 0,
 				'skipped' => 0,
 			];
@@ -131,7 +132,7 @@ class MailFetchService {
 	 */
 	private function fetchMapping(array $mapping): array {
 		if (empty($mapping['fetch_enabled'])) {
-			$message = 'Abruf ist deaktiviert.';
+			$message = $this->l10n->t('Fetch is disabled.');
 			$this->configService->setMappingLastRunStatus((string)$mapping['id'], 'disabled', $message);
 			return ['success' => false, 'message' => $message, 'imported' => 0, 'skipped' => 0];
 		}
@@ -140,7 +141,7 @@ class MailFetchService {
 		try {
 			$this->lockingProvider->acquireLock($lockKey, ILockingProvider::LOCK_EXCLUSIVE);
 		} catch (LockedException) {
-			$message = 'Abruf läuft bereits für dieses Mapping.';
+			$message = $this->l10n->t('Fetch is already running for this mapping.');
 			return ['success' => false, 'message' => $message, 'imported' => 0, 'skipped' => 0];
 		}
 
@@ -152,7 +153,7 @@ class MailFetchService {
 			// Frischen Stand laden (nach Lock)
 			$fresh = $this->configService->getMapping((string)$mapping['id']);
 			if ($fresh === null) {
-				throw new \RuntimeException('Mapping nicht gefunden.');
+				throw new \RuntimeException($this->l10n->t('Mapping not found.'));
 			}
 			$mapping = $fresh;
 
@@ -165,7 +166,10 @@ class MailFetchService {
 			$client->connect();
 			$mailbox = $client->getFolder((string)$mapping['imap_folder']);
 			if ($mailbox === null) {
-				throw new \RuntimeException(sprintf('IMAP-Ordner "%s" nicht gefunden.', $mapping['imap_folder']));
+				throw new \RuntimeException($this->l10n->t(
+					'IMAP folder "%1$s" not found.',
+					[(string)$mapping['imap_folder']],
+				));
 			}
 
 			$status = $mailbox->select();
@@ -312,7 +316,10 @@ class MailFetchService {
 				]);
 			}
 
-			$messageText = sprintf('%d Anhang/Anhänge importiert, %d übersprungen.', $imported, $skipped);
+			$messageText = $this->l10n->t(
+				'%1$d attachments imported, %2$d skipped.',
+				[$imported, $skipped],
+			);
 			$this->configService->updateMappingRuntimeState((string)$mapping['id'], [
 				'last_uid' => $maxUid,
 				'uidvalidity' => $uidValidity,
@@ -365,7 +372,7 @@ class MailFetchService {
 		$password = $this->configService->getPasswordFromMapping($mapping);
 
 		if ($host === '' || $user === '' || $password === '') {
-			throw new \RuntimeException('IMAP-Host, Benutzer und Passwort müssen gesetzt sein.');
+			throw new \RuntimeException($this->l10n->t('IMAP host, user and password must be set.'));
 		}
 
 		$encryption = match ((string)$mapping['imap_encryption']) {
@@ -408,7 +415,7 @@ class MailFetchService {
 
 	private function ensureTargetFolder(string $uid, string $path): Folder {
 		if (!$this->userManager->userExists($uid)) {
-			throw new \RuntimeException(sprintf('Zielbenutzer "%s" existiert nicht.', $uid));
+			throw new \RuntimeException($this->l10n->t('Target user "%1$s" does not exist.', [$uid]));
 		}
 
 		$userFolder = $this->rootFolder->getUserFolder($uid);
@@ -422,7 +429,7 @@ class MailFetchService {
 			if ($node instanceof Folder) {
 				return $node;
 			}
-			throw new \RuntimeException(sprintf('Zielpfad "%s" ist keine Ordner.', $path));
+			throw new \RuntimeException($this->l10n->t('Target path "%1$s" is not a folder.', [$path]));
 		} catch (NotFoundException) {
 			return $userFolder->newFolder($relative);
 		}
@@ -529,7 +536,7 @@ class MailFetchService {
 
 	private function friendlyError(\Throwable $e): string {
 		if ($e instanceof ConnectionFailedException) {
-			return 'IMAP-Verbindung fehlgeschlagen: ' . $e->getMessage();
+			return $this->l10n->t('IMAP connection failed: %1$s', [$e->getMessage()]);
 		}
 		return $e->getMessage();
 	}
