@@ -1,0 +1,87 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+
+jobs:
+  mail-to-nextcloud:
+    name: SMTP → MailDrop → Nextcloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP / Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer
+          coverage: none
+
+      - name: Install app dependencies
+        working-directory: apps/maildrop
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Pull images
+        run: docker compose pull db mail nextcloud
+
+      - name: Start Docker stack
+        # Ohne App-Bind-Mount (siehe docker-compose.ci.yml), sonst schlägt
+        # die Nextcloud-Erstinstallation unter Linux mit "Cannot write into apps" fehl.
+        run: docker compose up -d db mail nextcloud
+
+      - name: Wait for Nextcloud install
+        run: |
+          set -euo pipefail
+          echo "Waiting for Nextcloud install…"
+          for i in $(seq 1 90); do
+            code="$(curl -s -o /tmp/nc-status.json -w '%{http_code}' http://127.0.0.1:8080/status.php || true)"
+            if [ "$code" = "200" ] && grep -qE '"installed"[[:space:]]*:[[:space:]]*true' /tmp/nc-status.json; then
+              echo "Nextcloud installed (attempt ${i})"
+              cat /tmp/nc-status.json
+              exit 0
+            fi
+            if [ "$i" -eq 90 ]; then
+              echo "Timeout waiting for Nextcloud (last HTTP ${code})"
+              docker compose ps
+              docker compose logs --tail 200 nextcloud db
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Install MailDrop into Nextcloud
+        run: |
+          set -euo pipefail
+          docker compose exec -u root nextcloud mkdir -p /var/www/html/custom_apps
+          docker compose cp apps/maildrop/. nextcloud:/var/www/html/custom_apps/maildrop/
+          docker compose exec -u root nextcloud chown -R www-data:www-data /var/www/html/custom_apps/maildrop
+          docker compose exec -T -u www-data nextcloud php occ app:enable maildrop
+          docker compose exec -T -u www-data nextcloud php occ app:list --enabled | grep maildrop
+          docker compose exec -T -u www-data nextcloud php occ background:cron || true
+
+      - name: Run integration test
+        run: python3 tests/integration/test_mail_to_nextcloud.py
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail 200 nextcloud mail db || true
+          docker compose exec -T -u www-data nextcloud php occ config:list maildrop || true
+          docker compose exec -T -u www-data nextcloud tail -n 100 /var/www/html/data/nextcloud.log || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

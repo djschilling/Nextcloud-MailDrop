@@ -1,0 +1,12 @@
+# CI-Override: ersetzt den lokalen Bind-Mount von ./apps.
+# Compose merged Volumes nach Mount-Pfad – ohne diesen Eintrag bleibt
+# ./apps:/var/www/html/custom_apps aus docker-compose.yml aktiv und
+# bricht die Erstinstallation unter Linux ("Cannot write into apps").
+services:
+  nextcloud:
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ci_custom_apps:/var/www/html/custom_apps
+
+volumes:
+  ci_custom_apps:

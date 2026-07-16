@@ -23,14 +23,17 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 ```bash
 cd apps/maildrop && composer install --no-dev
 cd ../..
-docker compose up -d
+docker compose up -d              # Kern-Stack (db, mail, nextcloud)
+# optional mit Cron + App-Init:
+docker compose --profile full up -d
 ```
 
 Warte, bis Nextcloud bereit ist (erster Start kann 1–2 Minuten dauern):
 
 ```bash
 docker compose ps
-docker compose logs -f app-init
+# App manuell enablen (ohne Profile full):
+docker compose exec -u www-data nextcloud php occ app:enable maildrop
 ```
 
 Danach:
@@ -42,7 +45,7 @@ Danach:
 | GreenMail IMAP | localhost:3143 | `maildrop` / `maildrop` |
 | GreenMail Web | http://localhost:8081 | – |
 
-Die App `maildrop` wird vom Init-Container automatisch aktiviert.
+Mit `docker compose --profile full up -d` starten zusätzlich Cron und `app-init` (Auto-Enable).
 
 ### App konfigurieren
 
@@ -69,6 +72,23 @@ python3 scripts/send-test-mail.py --file ./README.md
 ```
 
 Anschließend in der Admin-UI **Jetzt abrufen** klicken (oder ~5 Minuten auf den Cron-Job warten). Die Anhänge erscheinen unter **Dateien → Mail-Anhänge**.
+
+## Integrationstest (E2E)
+
+Der Test sendet eine echte E-Mail an GreenMail, lässt MailDrop abrufen und prüft per WebDAV, dass der Anhang in Nextcloud liegt.
+
+```bash
+# Dependencies + Stack (falls noch nicht laufend)
+cd apps/maildrop && composer install --no-dev && cd ../..
+docker compose up -d
+
+# Test
+./tests/integration/run.sh
+# oder:
+python3 tests/integration/test_mail_to_nextcloud.py
+```
+
+In GitHub Actions läuft derselbe Test über `.github/workflows/integration.yml`.
 
 ## Projektstruktur
 

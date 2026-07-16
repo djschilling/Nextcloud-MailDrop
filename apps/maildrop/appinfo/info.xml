@@ -13,13 +13,13 @@ Konfigurierbar über die Admin-Einstellungen:
 - Zielordner in Nextcloud
 - Intervall und Filter
 	]]></description>
-	<version>1.1.0</version>
+	<version>1.1.1</version>
 	<licence>agpl</licence>
 	<author mail="dev@localhost">MailDrop</author>
 	<namespace>MailDrop</namespace>
 	<category>files</category>
 	<category>organization</category>
-	<bugs>https://github.com/example/nextcloud-maildrop/issues</bugs>
+	<bugs>https://github.com/djschilling/Nextcloud-MailDrop/issues</bugs>
 	<dependencies>
 		<php min-version="8.1" max-version="8.4"/>
 		<nextcloud min-version="28" max-version="31"/>
@@ -27,6 +27,9 @@ Konfigurierbar über die Admin-Einstellungen:
 	<background-jobs>
 		<job>OCA\MailDrop\BackgroundJob\FetchMailJob</job>
 	</background-jobs>
+	<commands>
+		<command>OCA\MailDrop\Command\FetchCommand</command>
+	</commands>
 	<settings>
 		<admin>OCA\MailDrop\Settings\AdminSettings</admin>
 		<admin-section>OCA\MailDrop\Settings\AdminSection</admin-section>
