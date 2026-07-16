@@ -22,42 +22,47 @@ class ConfigController extends Controller {
 	}
 
 	public function get(): DataResponse {
-		$config = $this->configService->getAll();
-		// Passwort nie an den Client zurückgeben
-		$config['imap_password'] = '';
-		return new DataResponse($config);
+		return new DataResponse($this->configService->getAll());
 	}
 
 	public function save(): DataResponse {
-		$data = [
-			'fetch_enabled' => $this->request->getParam('fetch_enabled'),
-			'imap_host' => $this->request->getParam('imap_host'),
-			'imap_port' => $this->request->getParam('imap_port'),
-			'imap_encryption' => $this->request->getParam('imap_encryption'),
-			'imap_user' => $this->request->getParam('imap_user'),
-			'imap_password' => $this->request->getParam('imap_password'),
-			'imap_folder' => $this->request->getParam('imap_folder'),
-			'target_user' => $this->request->getParam('target_user'),
-			'target_path' => $this->request->getParam('target_path'),
-			'mark_as_seen' => $this->request->getParam('mark_as_seen'),
-			'delete_after_import' => $this->request->getParam('delete_after_import'),
-			'subject_filter' => $this->request->getParam('subject_filter'),
-			'sender_filter' => $this->request->getParam('sender_filter'),
-		];
+		$mappings = $this->request->getParam('mappings');
+		if (!is_array($mappings)) {
+			return new DataResponse(['message' => 'mappings muss ein Array sein.'], Http::STATUS_BAD_REQUEST);
+		}
 
-		$config = $this->configService->save($data);
-		$config['imap_password'] = '';
-		return new DataResponse($config);
+		return new DataResponse([
+			'mappings' => $this->configService->saveMappings($mappings),
+		]);
+	}
+
+	public function saveOne(string $id): DataResponse {
+		$data = $this->request->getParams();
+		$data['id'] = $id;
+		return new DataResponse($this->configService->saveMapping($data));
+	}
+
+	public function create(): DataResponse {
+		$data = $this->request->getParams();
+		unset($data['id']);
+		return new DataResponse($this->configService->saveMapping($data), Http::STATUS_CREATED);
+	}
+
+	public function destroy(string $id): DataResponse {
+		$this->configService->deleteMapping($id);
+		return new DataResponse(['mappings' => $this->configService->getMappingsForClient()]);
 	}
 
 	public function testConnection(): DataResponse {
-		$result = $this->mailFetchService->testConnection();
+		$mappingId = $this->request->getParam('id');
+		$result = $this->mailFetchService->testConnection(is_string($mappingId) ? $mappingId : null);
 		$status = $result['success'] ? Http::STATUS_OK : Http::STATUS_BAD_REQUEST;
 		return new DataResponse($result, $status);
 	}
 
 	public function fetchNow(): DataResponse {
-		$result = $this->mailFetchService->fetchAndStore();
+		$mappingId = $this->request->getParam('id');
+		$result = $this->mailFetchService->fetchAndStore(is_string($mappingId) && $mappingId !== '' ? $mappingId : null);
 		$status = $result['success'] ? Http::STATUS_OK : Http::STATUS_BAD_REQUEST;
 		return new DataResponse($result, $status);
 	}

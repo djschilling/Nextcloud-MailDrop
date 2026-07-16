@@ -4,11 +4,12 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 
 ## Features
 
+- Mehrere Mapping-Konfigurationen (IMAP → Zielordner), jeweils einzeln aktivierbar
 - IMAP-Abruf (inkl. optional SSL/TLS)
 - Anhänge landen unter einem wählbaren Benutzer/Pfad
 - Filter nach Betreff und Absender
 - Nachrichten als gelesen markieren oder nach Import löschen
-- Verbindungstest und manueller Abruf in den Einstellungen
+- Verbindungstest und manueller Abruf pro Mapping oder für alle
 - Hintergrund-Job alle 5 Minuten
 
 ## Lokales Setup (Docker)

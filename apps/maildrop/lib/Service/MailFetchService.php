@@ -26,36 +26,115 @@ class MailFetchService {
 	/**
 	 * @return array{success: bool, message: string, imported?: int}
 	 */
-	public function testConnection(): array {
+	public function testConnection(?string $mappingId = null): array {
+		$mapping = $this->resolveMapping($mappingId);
+		if ($mapping === null) {
+			return ['success' => false, 'message' => 'Kein Mapping gefunden.'];
+		}
+
+		$client = null;
 		try {
-			$client = $this->createClient();
+			$client = $this->createClient($mapping);
 			$client->connect();
-			$folder = $client->getFolder($this->configService->get('imap_folder', 'INBOX'));
+			$folder = $client->getFolder((string)$mapping['imap_folder']);
 			$count = 0;
 			if ($folder !== null) {
 				$count = $folder->messages()->all()->leaveUnread()->get()->count();
 			}
-			$client->disconnect();
 			return [
 				'success' => true,
-				'message' => sprintf('Verbindung OK. %d Nachricht(en) im Ordner.', $count),
+				'message' => sprintf(
+					'[%s] Verbindung OK. %d Nachricht(en) im Ordner.',
+					$mapping['name'],
+					$count,
+				),
 			];
 		} catch (\Throwable $e) {
 			return [
 				'success' => false,
-				'message' => $this->friendlyError($e),
+				'message' => sprintf('[%s] %s', $mapping['name'], $this->friendlyError($e)),
 			];
+		} finally {
+			if ($client !== null) {
+				try {
+					$client->disconnect();
+				} catch (\Throwable) {
+					// ignore
+				}
+			}
 		}
 	}
 
 	/**
+	 * @return array{success: bool, message: string, imported: int, skipped: int, results?: list<array<string, mixed>>}
+	 */
+	public function fetchAndStore(?string $mappingId = null): array {
+		if ($mappingId !== null) {
+			$mapping = $this->configService->getMapping($mappingId);
+			if ($mapping === null) {
+				return [
+					'success' => false,
+					'message' => 'Mapping nicht gefunden.',
+					'imported' => 0,
+					'skipped' => 0,
+				];
+			}
+			return $this->fetchMapping($mapping);
+		}
+
+		$mappings = array_values(array_filter(
+			$this->configService->getMappings(),
+			static fn (array $m) => !empty($m['fetch_enabled']),
+		));
+
+		if ($mappings === []) {
+			return [
+				'success' => false,
+				'message' => 'Kein aktives Mapping konfiguriert.',
+				'imported' => 0,
+				'skipped' => 0,
+			];
+		}
+
+		$imported = 0;
+		$skipped = 0;
+		$ok = true;
+		$messages = [];
+		$results = [];
+
+		foreach ($mappings as $mapping) {
+			$result = $this->fetchMapping($mapping);
+			$imported += $result['imported'];
+			$skipped += $result['skipped'];
+			$ok = $ok && $result['success'];
+			$messages[] = sprintf('%s: %s', $mapping['name'], $result['message']);
+			$results[] = [
+				'id' => $mapping['id'],
+				'name' => $mapping['name'],
+				'success' => $result['success'],
+				'message' => $result['message'],
+				'imported' => $result['imported'],
+				'skipped' => $result['skipped'],
+			];
+		}
+
+		return [
+			'success' => $ok,
+			'message' => implode(' | ', $messages),
+			'imported' => $imported,
+			'skipped' => $skipped,
+			'results' => $results,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $mapping
 	 * @return array{success: bool, message: string, imported: int, skipped: int}
 	 */
-	public function fetchAndStore(): array {
-		$config = $this->configService->getAll();
-		if (!$config['fetch_enabled']) {
+	private function fetchMapping(array $mapping): array {
+		if (empty($mapping['fetch_enabled'])) {
 			$message = 'Abruf ist deaktiviert.';
-			$this->configService->setLastRunStatus('disabled', $message);
+			$this->configService->setMappingLastRunStatus((string)$mapping['id'], 'disabled', $message);
 			return ['success' => false, 'message' => $message, 'imported' => 0, 'skipped' => 0];
 		}
 
@@ -65,18 +144,18 @@ class MailFetchService {
 
 		try {
 			$targetFolder = $this->ensureTargetFolder(
-				(string)$config['target_user'],
-				(string)$config['target_path'],
+				(string)$mapping['target_user'],
+				(string)$mapping['target_path'],
 			);
 
-			$client = $this->createClient();
+			$client = $this->createClient($mapping);
 			$client->connect();
-			$mailbox = $client->getFolder((string)$config['imap_folder']);
+			$mailbox = $client->getFolder((string)$mapping['imap_folder']);
 			if ($mailbox === null) {
-				throw new \RuntimeException(sprintf('IMAP-Ordner "%s" nicht gefunden.', $config['imap_folder']));
+				throw new \RuntimeException(sprintf('IMAP-Ordner "%s" nicht gefunden.', $mapping['imap_folder']));
 			}
 
-			$lastUid = $this->configService->getLastUid();
+			$lastUid = (int)$mapping['last_uid'];
 			$messages = $mailbox->messages()->all()->setFetchOrder('asc')->leaveUnread()->get();
 			$maxUid = $lastUid;
 
@@ -91,7 +170,7 @@ class MailFetchService {
 				$subject = (string)$message->getSubject();
 				$from = $this->formatFrom($message);
 
-				if (!$this->matchesFilters($subject, $from, $config)) {
+				if (!$this->matchesFilters($subject, $from, $mapping)) {
 					$skipped++;
 					continue;
 				}
@@ -99,7 +178,7 @@ class MailFetchService {
 				$attachments = $message->getAttachments();
 				if ($attachments->count() === 0) {
 					$skipped++;
-					if ($config['mark_as_seen']) {
+					if (!empty($mapping['mark_as_seen'])) {
 						$message->setFlag('Seen');
 					}
 					continue;
@@ -123,6 +202,8 @@ class MailFetchService {
 				}
 
 				$meta = [
+					'mapping_id' => $mapping['id'],
+					'mapping_name' => $mapping['name'],
 					'uid' => $uid,
 					'subject' => $subject,
 					'from' => $from,
@@ -131,21 +212,26 @@ class MailFetchService {
 				];
 				$mailFolder->newFile('email.json', json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-				if ($config['mark_as_seen']) {
+				if (!empty($mapping['mark_as_seen'])) {
 					$message->setFlag('Seen');
 				}
-				if ($config['delete_after_import']) {
+				if (!empty($mapping['delete_after_import'])) {
 					$message->delete();
 				}
 			}
 
+			$updates = [
+				'last_run' => (new \DateTimeImmutable('now'))->format(\DateTimeInterface::ATOM),
+				'last_status' => 'ok',
+				'last_error' => sprintf('%d Anhang/Anhänge importiert, %d übersprungen.', $imported, $skipped),
+			];
 			if ($maxUid > $lastUid) {
-				$this->configService->setLastUid($maxUid);
+				$updates['last_uid'] = $maxUid;
 			}
+			$this->configService->updateMappingRuntimeState((string)$mapping['id'], $updates);
 
-			$messageText = sprintf('%d Anhang/Anhänge importiert, %d übersprungen.', $imported, $skipped);
-			$this->configService->setLastRunStatus('ok', $messageText);
-			$this->logger->info('MailDrop: ' . $messageText, ['app' => 'maildrop']);
+			$messageText = $updates['last_error'];
+			$this->logger->info('MailDrop [' . $mapping['name'] . ']: ' . $messageText, ['app' => 'maildrop']);
 
 			return [
 				'success' => true,
@@ -155,8 +241,8 @@ class MailFetchService {
 			];
 		} catch (\Throwable $e) {
 			$error = $this->friendlyError($e);
-			$this->logger->error('MailDrop fetch failed: ' . $error, ['app' => 'maildrop']);
-			$this->configService->setLastRunStatus('error', $error);
+			$this->logger->error('MailDrop [' . $mapping['name'] . '] failed: ' . $error, ['app' => 'maildrop']);
+			$this->configService->setMappingLastRunStatus((string)$mapping['id'], 'error', $error);
 			return [
 				'success' => false,
 				'message' => $error,
@@ -174,17 +260,30 @@ class MailFetchService {
 		}
 	}
 
-	private function createClient(): Client {
-		$config = $this->configService->getAll();
-		$host = (string)$config['imap_host'];
-		$user = (string)$config['imap_user'];
-		$password = $this->configService->getPassword();
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function resolveMapping(?string $mappingId): ?array {
+		if ($mappingId !== null && $mappingId !== '') {
+			return $this->configService->getMapping($mappingId);
+		}
+		$mappings = $this->configService->getMappings();
+		return $mappings[0] ?? null;
+	}
+
+	/**
+	 * @param array<string, mixed> $mapping
+	 */
+	private function createClient(array $mapping): Client {
+		$host = (string)$mapping['imap_host'];
+		$user = (string)$mapping['imap_user'];
+		$password = $this->configService->getPasswordFromMapping($mapping);
 
 		if ($host === '' || $user === '' || $password === '') {
 			throw new \RuntimeException('IMAP-Host, Benutzer und Passwort müssen gesetzt sein.');
 		}
 
-		$encryption = match ((string)$config['imap_encryption']) {
+		$encryption = match ((string)$mapping['imap_encryption']) {
 			'ssl' => 'ssl',
 			'tls' => 'tls',
 			default => false,
@@ -193,7 +292,7 @@ class MailFetchService {
 		$cm = new ClientManager();
 		return $cm->make([
 			'host' => $host,
-			'port' => (int)$config['imap_port'],
+			'port' => (int)$mapping['imap_port'],
 			'encryption' => $encryption,
 			'validate_cert' => false,
 			'username' => $user,
@@ -253,11 +352,11 @@ class MailFetchService {
 	}
 
 	/**
-	 * @param array<string, mixed> $config
+	 * @param array<string, mixed> $mapping
 	 */
-	private function matchesFilters(string $subject, string $from, array $config): bool {
-		$subjectFilter = trim((string)$config['subject_filter']);
-		$senderFilter = trim((string)$config['sender_filter']);
+	private function matchesFilters(string $subject, string $from, array $mapping): bool {
+		$subjectFilter = trim((string)$mapping['subject_filter']);
+		$senderFilter = trim((string)$mapping['sender_filter']);
 
 		if ($subjectFilter !== '' && stripos($subject, $subjectFilter) === false) {
 			return false;

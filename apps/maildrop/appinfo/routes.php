@@ -15,6 +15,21 @@ return [
 			'verb' => 'PUT',
 		],
 		[
+			'name' => 'config#create',
+			'url' => '/api/mappings',
+			'verb' => 'POST',
+		],
+		[
+			'name' => 'config#saveOne',
+			'url' => '/api/mappings/{id}',
+			'verb' => 'PUT',
+		],
+		[
+			'name' => 'config#destroy',
+			'url' => '/api/mappings/{id}',
+			'verb' => 'DELETE',
+		],
+		[
 			'name' => 'config#testConnection',
 			'url' => '/api/test',
 			'verb' => 'POST',
