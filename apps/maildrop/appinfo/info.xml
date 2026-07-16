@@ -9,9 +9,9 @@ MailDrop holt per IMAP E-Mails ab, extrahiert Anhänge und speichert sie
 automatisch in einem konfigurierbaren Nextcloud-Ordner.
 
 Konfigurierbar über die Admin-Einstellungen:
-- IMAP-Server, Zugangsdaten und Ordner
-- Zielordner in Nextcloud
-- Intervall und Filter
+- Mehrere Mapping-Konfigurationen (IMAP → Zielordner)
+- Filter nach Betreff/Absender
+- Intervall und Abrufverhalten
 	]]></description>
 	<version>1.2.0</version>
 	<licence>agpl</licence>
