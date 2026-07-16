@@ -1,0 +1,6 @@
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
+apps/maildrop/vendor/

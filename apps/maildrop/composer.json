@@ -1,0 +1,21 @@
+{
+	"name": "nextcloud/maildrop",
+	"description": "Nextcloud MailDrop – receive emails with attachments and store them in Nextcloud",
+	"license": "AGPL-3.0-or-later",
+	"autoload": {
+		"psr-4": {
+			"OCA\\MailDrop\\": "lib/"
+		}
+	},
+	"require": {
+		"php": ">=8.1",
+		"webklex/php-imap": "^5.5"
+	},
+	"config": {
+		"platform": {
+			"php": "8.2"
+		},
+		"sort-packages": true,
+		"optimize-autoloader": true
+	}
+}

@@ -1,0 +1,85 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nextcloud:
+    image: nextcloud:31-apache
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: nextcloud
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: admin
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost 127.0.0.1
+      OVERWRITEPROTOCOL: http
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./apps:/var/www/html/custom_apps
+    depends_on:
+      db:
+        condition: service_healthy
+      mail:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/status.php | grep -q '\"installed\":true' || curl -fsS http://localhost/status.php | grep -q '\"installed\": true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  cron:
+    image: nextcloud:31-apache
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./apps:/var/www/html/custom_apps
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+
+  mail:
+    image: greenmail/standalone:2.1.3
+    restart: unless-stopped
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all
+        -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=maildrop:maildrop@localhost
+    ports:
+      - "3025:3025"
+      - "3143:3143"
+      - "8081:8080"
+
+  app-init:
+    image: nextcloud:31-apache
+    restart: "no"
+    entrypoint: ["/bin/bash", "/docker-init.sh"]
+    volumes:
+      - nextcloud_data:/var/www/html
+      - ./apps:/var/www/html/custom_apps
+      - ./docker/nextcloud/docker-init.sh:/docker-init.sh:ro
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  nextcloud_data:
