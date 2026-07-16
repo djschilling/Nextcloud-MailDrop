@@ -12,6 +12,38 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 - Verbindungstest und manueller Abruf pro Mapping oder für alle
 - Hintergrund-Job alle 5 Minuten
 
+## Installation (andere Nextcloud-Instanz)
+
+Voraussetzungen: Nextcloud **28–31**, PHP **8.1–8.4**, funktionierender System-Cron, ausgehender IMAP-Zugriff.
+
+### Aus GitHub-Release
+
+1. Release-Archiv laden: [Releases](https://github.com/djschilling/Nextcloud-MailDrop/releases) → `maildrop-x.y.z.tar.gz`
+2. Auf dem Server nach `custom_apps/` entpacken (Ordner muss `maildrop` heißen):
+
+```bash
+sudo tar -xzf maildrop-1.0.0.tar.gz -C /path/to/nextcloud/custom_apps/
+sudo chown -R www-data:www-data /path/to/nextcloud/custom_apps/maildrop
+```
+
+3. App aktivieren:
+
+```bash
+sudo -u www-data php /path/to/nextcloud/occ app:enable maildrop
+```
+
+4. In Nextcloud: **Einstellungen → Administration → MailDrop** konfigurieren.
+
+### Release selbst bauen
+
+```bash
+./scripts/build-release.sh          # Version aus apps/maildrop/appinfo/info.xml
+# oder:
+./scripts/build-release.sh 1.0.0    # setzt Version in info.xml und baut
+```
+
+Ergebnis: `dist/maildrop-<version>.tar.gz` (inkl. `vendor/`) und optional `.sha256`.
+
 ## Lokales Setup (Docker)
 
 ### Voraussetzungen
@@ -94,10 +126,12 @@ In GitHub Actions läuft derselbe Test über `.github/workflows/integration.yml`
 ## Projektstruktur
 
 ```
-apps/maildrop/          # Nextcloud-App MailDrop
-docker/nextcloud/       # Init-Skript
-docker-compose.yml      # Nextcloud, MariaDB, Cron, GreenMail
+apps/maildrop/              # Nextcloud-App MailDrop
+docker/nextcloud/           # Init-Skript
+docker-compose.yml          # Nextcloud, MariaDB, Cron, GreenMail
 scripts/send-test-mail.py
+scripts/build-release.sh    # Release-Tarball inkl. vendor/
+dist/                       # Build-Ausgabe (gitignored)
 ```
 
 ## Architektur (kurz)
