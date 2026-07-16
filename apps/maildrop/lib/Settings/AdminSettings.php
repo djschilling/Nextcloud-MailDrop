@@ -23,6 +23,7 @@ class AdminSettings implements ISettings {
 		$config['imap_password'] = '';
 		$this->initialState->provideInitialState('config', $config);
 
+		Util::addTranslations(Application::APP_ID);
 		Util::addScript(Application::APP_ID, 'admin');
 		Util::addStyle(Application::APP_ID, 'admin');
 

@@ -77,6 +77,7 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 | `lib/Controller/ConfigController.php` | REST API for admin UI |
 | `lib/Settings/` | Admin section + form |
 | `js/admin.js` / `css/admin.css` | Settings UI |
+| `l10n/*.json` / `l10n/*.js` | UI translations (source language: English; `de` + `en`) |
 
 ### Docker
 
