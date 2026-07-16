@@ -28,9 +28,11 @@ Hinweise für AI-Agents, die in diesem Repository arbeiten.
 # Dependencies (vendor ist gitignored – immer nötig nach Clone/CI)
 cd apps/maildrop && composer install --no-dev --optimize-autoloader
 
-# Lokaler Stack
+# Lokaler Stack (Kern: db, mail, nextcloud)
 docker compose up -d
-docker compose logs -f app-init    # wartet auf Enable von maildrop
+# optional: Cron + app-init (Auto-Enable)
+docker compose --profile full up -d
+docker compose logs -f app-init    # nur mit Profile full
 docker compose down                # stoppen
 docker compose down -v             # inkl. Daten zurücksetzen
 
@@ -74,9 +76,11 @@ SMTP → GreenMail → MailDrop (IMAP Poll) → Nextcloud Files
 
 ### Docker
 
-- `docker-compose.yml`: `db`, `nextcloud`, `cron`, `mail` (GreenMail), `app-init`
-- App wird nach `custom_apps` gemountet (`./apps` → `/var/www/html/custom_apps`)
-- `app-init` aktiviert `maildrop` nach der Erstinstallation
+- `docker-compose.yml`: Kern-Services `db`, `nextcloud`, `mail` (GreenMail)
+- `cron` und `app-init` nur mit Compose-Profile **`full`**
+- Lokal: App via Bind-Mount `./apps` → `/var/www/html/custom_apps`
+- `app-init` aktiviert `maildrop` nach der Erstinstallation (nur Profile `full`)
+- Nextcloud-Healthcheck prüft nur Apache/`status.php` – nicht „installed“, damit `compose up` nicht an Cron/App-Init hängt
 
 ## Kritische Regeln
 
@@ -90,10 +94,17 @@ Niemals den App-Key `enabled` als Feature-Flag missbrauchen.
 ### Mehrere Mappings
 
 - Gespeichert als JSON in App-Config `mappings`
-- Jedes Mapping hat eigene IMAP-Daten, Filter, Zielordner und `last_uid`
-- Legacy-Einzelconfig wird beim ersten Lesen automatisch migriert
+- Jedes Mapping hat eigene IMAP-Daten, Filter, Zielordner, `fetch_enabled`, `last_uid` und Lauf-Status (`last_run` / `last_status` / `last_error`)
+- Legacy-Einzelconfig (flache Keys wie `imap_host`, …) wird beim ersten Lesen automatisch migriert
 - Admin-UI: Liste links, Editor rechts
 - API: `GET/PUT /api/config`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test|fetch` mit optionalem `{id}`
+- Tests/Skripte: Mapping-Config über `ConfigService::saveMappings()` setzen – **nicht** über flache `occ config:app:set maildrop imap_*`-Keys
+
+### Passwort laden vs. speichern
+
+- **`hydrateMapping()`**: aus gespeichertem JSON lesen – Passwort bleibt wie gespeichert (bereits verschlüsselt), **nicht** erneut encrypten
+- **`normalizeMapping()`**: nur beim Speichern/Anlegen – Klartext-Passwort encrypten; leerer Client-Wert → bisheriges Passwort behalten
+- Doppeltes Encrypten beim Laden bricht den IMAP-Login (häufige Falle bei Refactors am ConfigService)
 
 ### Settings registrieren
 
@@ -110,7 +121,7 @@ Niemals den App-Key `enabled` als Feature-Flag missbrauchen.
 ### Passwörter
 
 - IMAP-Passwort nur verschlüsselt speichern (`OCP\Security\ICrypto`)
-- Nie im API-Response an den Client zurückgeben
+- Nie im API-Response an den Client zurückgeben (`imap_password_set` statt Klartext)
 
 ## Coding-Konventionen
 
@@ -124,8 +135,14 @@ Niemals den App-Key `enabled` als Feature-Flag missbrauchen.
 
 - E2E: `tests/integration/test_mail_to_nextcloud.py`
   - echte SMTP-Mail → GreenMail → `occ maildrop:fetch` → WebDAV-Assertion
-- CI: `.github/workflows/integration.yml` (Docker Compose + derselbe Test)
+  - konfiguriert ein Mapping via `ConfigService::saveMappings()` (inkl. `fetch_enabled`)
 - Zielordner im E2E: `/MailDrop-Integration` (ASCII, zuverlässig für WebDAV)
+- CI: `.github/workflows/integration.yml`
+  - `COMPOSE_FILE=docker-compose.yml:docker-compose.ci.yml`
+  - startet nur `db` / `mail` / `nextcloud` (kein Profile `full`)
+  - `docker-compose.ci.yml` ersetzt den App-Bind-Mount durch ein leeres Volume – sonst schlägt die Nextcloud-Erstinstallation unter Linux mit „Cannot write into apps“ fehl
+  - App wird per `docker compose cp` nach `custom_apps/maildrop` kopiert und per `occ app:enable` aktiviert
+  - CI-Workflows / Compose-Overrides nicht ändern, nur um Checks „grün“ zu machen
 
 Bei Test-/Fetch-Fehlern prüfen:
 
@@ -140,9 +157,11 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 | Aufgabe | Vorgehen |
 |---------|----------|
 | IMAP-Logik ändern | `MailFetchService.php`, E2E laufen lassen |
+| Mapping-Felder / Persistenz | `ConfigService` (`hydrate` vs `normalize`), danach UI + E2E anpassen |
 | Admin-UI erweitern | `ConfigService` + `ConfigController` + `js/admin.js` |
 | Neuen Occ-Befehl | Klasse unter `lib/Command/`, in `info.xml` registrieren, Version bumpen |
 | Dependencies | `composer.json` / `composer.lock` committen, nicht `vendor/` |
+| CI-Install kaputt | Bind-Mount vs. `docker-compose.ci.yml` prüfen; App per `compose cp` |
 
 ## Nicht tun
 
@@ -150,3 +169,5 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - `git push --force` auf `main` vermeiden
 - Docker-Volumes (`down -v`) nur wenn bewusst Datenverlust ok ist
 - App-Config-Key nicht `enabled` für Feature-Flags missbrauchen
+- Gespeicherte Mapping-Passwörter nicht nochmal durch `normalizeMapping()` / `encrypt()` jagen
+- In CI den lokalen `./apps`-Bind-Mount nicht wieder aktivieren (bricht Linux-Install)
