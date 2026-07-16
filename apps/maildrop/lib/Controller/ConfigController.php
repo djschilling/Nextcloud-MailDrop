@@ -10,6 +10,8 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserManager;
 
 class ConfigController extends Controller {
 	public function __construct(
@@ -17,12 +19,58 @@ class ConfigController extends Controller {
 		IRequest $request,
 		private ConfigService $configService,
 		private MailFetchService $mailFetchService,
+		private IUserManager $userManager,
 	) {
 		parent::__construct($appName, $request);
 	}
 
 	public function get(): DataResponse {
 		return new DataResponse($this->configService->getAll());
+	}
+
+	/**
+	 * Benutzer für Zielbenutzer-Auswahl (Admin-Settings).
+	 */
+	public function searchUsers(): DataResponse {
+		$search = trim((string)$this->request->getParam('search', ''));
+		$limit = (int)$this->request->getParam('limit', 50);
+		if ($limit < 1) {
+			$limit = 50;
+		}
+		if ($limit > 200) {
+			$limit = 200;
+		}
+
+		/** @var array<string, array{id: string, displayName: string}> $byId */
+		$byId = [];
+		$add = static function (IUser $user) use (&$byId): void {
+			$uid = $user->getUID();
+			$byId[$uid] = [
+				'id' => $uid,
+				'displayName' => $user->getDisplayName(),
+			];
+		};
+
+		foreach ($this->userManager->search($search, $limit) as $user) {
+			$add($user);
+		}
+		if ($search !== '') {
+			foreach ($this->userManager->searchDisplayName($search, $limit) as $user) {
+				$add($user);
+			}
+			$exact = $this->userManager->get($search);
+			if ($exact instanceof IUser) {
+				$add($exact);
+			}
+		}
+
+		$users = array_values($byId);
+		usort(
+			$users,
+			static fn (array $a, array $b): int => strcasecmp($a['displayName'], $b['displayName']),
+		);
+
+		return new DataResponse(['users' => array_slice($users, 0, $limit)]);
 	}
 
 	public function save(): DataResponse {

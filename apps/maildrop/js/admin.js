@@ -96,7 +96,7 @@
 							</select>
 						</p>
 						<p>
-							<label for="mf-user">Benutzer</label>
+							<label for="mf-user">IMAP-Benutzer</label>
 							<input type="text" id="mf-user" value="${escapeAttr(mapping.imap_user)}" autocomplete="off">
 						</p>
 						<p>
@@ -109,13 +109,32 @@
 						</p>
 
 						<h3>Ziel in Nextcloud</h3>
-						<p>
-							<label for="mf-target-user">Benutzer</label>
-							<input type="text" id="mf-target-user" value="${escapeAttr(mapping.target_user)}" placeholder="admin">
+						<p class="maildrop-user-picker">
+							<label for="mf-target-user-input">Zielbenutzer</label>
+							<input type="hidden" id="mf-target-user" value="${escapeAttr(mapping.target_user)}" required>
+							<input
+								type="text"
+								id="mf-target-user-input"
+								class="maildrop-user-picker__input"
+								value="${escapeAttr(mapping.target_user)}"
+								placeholder="Name oder User-ID eingeben…"
+								autocomplete="off"
+								spellcheck="false"
+								role="combobox"
+								aria-expanded="false"
+								aria-controls="mf-user-results"
+								aria-autocomplete="list"
+							>
+							<ul id="mf-user-results" class="maildrop-user-picker__menu" role="listbox" hidden></ul>
+							<em class="maildrop-hint" id="mf-target-user-hint"></em>
 						</p>
 						<p>
 							<label for="mf-target-path">Zielordner</label>
-							<input type="text" id="mf-target-path" value="${escapeAttr(mapping.target_path)}" placeholder="/Mail-Anhänge">
+							<span class="maildrop-path-row">
+								<input type="text" id="mf-target-path" value="${escapeAttr(mapping.target_path)}" placeholder="/Mail-Anhänge">
+								<button type="button" id="mf-pick-path" title="Ordner über Nextcloud-Dateiauswahl wählen">Ordner wählen…</button>
+							</span>
+							<em class="maildrop-hint">Der Dialog zeigt die Dateien des angemeldeten Admins. Existiert der Ordner noch nicht, kann der Pfad auch manuell eingetragen werden (wird beim Abruf angelegt).</em>
 						</p>
 
 						<h3>Filter &amp; Verhalten</h3>
@@ -180,6 +199,12 @@
 				setStatus(error.message || 'Anlegen fehlgeschlagen.', 'error')
 			}
 		})
+
+		document.getElementById('mf-pick-path').addEventListener('click', () => {
+			pickTargetFolder(setStatus)
+		})
+
+		bindUserPicker()
 
 		document.getElementById('maildrop-form').addEventListener('submit', async (event) => {
 			event.preventDefault()
@@ -262,6 +287,283 @@
 		}
 	}
 
+	function currentUserId() {
+		if (typeof OC.getCurrentUser === 'function') {
+			const user = OC.getCurrentUser()
+			if (user && user.uid) {
+				return String(user.uid)
+			}
+		}
+		return typeof OC.currentUser === 'string' ? OC.currentUser : ''
+	}
+
+	function formatUserLabel(user) {
+		if (!user) {
+			return ''
+		}
+		const id = user.id || ''
+		const name = user.displayName || id
+		return name === id ? id : (name + ' (' + id + ')')
+	}
+
+	function bindUserPicker() {
+		const hidden = document.getElementById('mf-target-user')
+		const input = document.getElementById('mf-target-user-input')
+		const menu = document.getElementById('mf-user-results')
+		const hint = document.getElementById('mf-target-user-hint')
+		if (!hidden || !input || !menu || !hint) {
+			return
+		}
+
+		let allUsers = []
+		let visibleUsers = []
+		let activeIndex = -1
+		let open = false
+
+		// Menü an body hängen – sonst schneidet das Settings-Layout die Liste ab
+		if (menu.parentElement !== document.body) {
+			document.body.appendChild(menu)
+		}
+
+		const positionMenu = () => {
+			const rect = input.getBoundingClientRect()
+			menu.style.position = 'fixed'
+			menu.style.left = Math.round(rect.left) + 'px'
+			menu.style.top = Math.round(rect.bottom + 4) + 'px'
+			menu.style.width = Math.round(rect.width) + 'px'
+			menu.style.right = 'auto'
+		}
+
+		const setOpen = (next) => {
+			open = next
+			menu.hidden = !next
+			input.setAttribute('aria-expanded', next ? 'true' : 'false')
+			if (next) {
+				positionMenu()
+			}
+			if (!next) {
+				activeIndex = -1
+			}
+		}
+
+		const matchesQuery = (user, query) => {
+			if (!query) {
+				return true
+			}
+			const q = query.toLocaleLowerCase()
+			const id = String(user.id || '').toLocaleLowerCase()
+			const name = String(user.displayName || '').toLocaleLowerCase()
+			return id.includes(q) || name.includes(q)
+		}
+
+		const selectUser = (user) => {
+			hidden.value = user.id
+			input.value = formatUserLabel(user)
+			hint.textContent = ''
+			setOpen(false)
+		}
+
+		const renderMenu = (users) => {
+			visibleUsers = users
+			if (!users.length) {
+				menu.innerHTML = '<li class="maildrop-user-picker__empty">Keine Treffer</li>'
+				setOpen(true)
+				return
+			}
+			menu.innerHTML = users.map((user, index) => (
+				'<li role="option" class="maildrop-user-picker__option'
+				+ (index === activeIndex ? ' is-active' : '')
+				+ '" data-index="' + index + '" data-id="' + escapeAttr(user.id) + '">'
+				+ '<span class="maildrop-user-picker__name">' + escapeHtml(user.displayName || user.id) + '</span>'
+				+ '<span class="maildrop-user-picker__id">' + escapeHtml(user.id) + '</span>'
+				+ '</li>'
+			)).join('')
+			menu.querySelectorAll('.maildrop-user-picker__option').forEach((item) => {
+				item.addEventListener('mousedown', (event) => {
+					event.preventDefault()
+					const id = item.getAttribute('data-id')
+					const user = visibleUsers.find((u) => u.id === id)
+					if (user) {
+						selectUser(user)
+					}
+				})
+			})
+			setOpen(true)
+		}
+
+		const applyFilter = (query) => {
+			const filtered = allUsers.filter((user) => matchesQuery(user, query))
+			activeIndex = filtered.length ? 0 : -1
+			renderMenu(filtered)
+			hint.textContent = allUsers.length
+				? (filtered.length + ' von ' + allUsers.length)
+				: ''
+		}
+
+		const syncLabelFromHidden = () => {
+			const uid = hidden.value.trim()
+			if (!uid) {
+				return
+			}
+			const match = allUsers.find((u) => u.id === uid)
+			if (match) {
+				input.value = formatUserLabel(match)
+			}
+		}
+
+		input.addEventListener('focus', () => {
+			input.value = ''
+			if (!allUsers.length) {
+				hint.textContent = 'Lade Benutzer…'
+				menu.innerHTML = '<li class="maildrop-user-picker__empty">Lade Benutzer…</li>'
+				setOpen(true)
+				return
+			}
+			applyFilter('')
+		})
+
+		input.addEventListener('input', () => {
+			applyFilter(input.value.trim())
+			if (open) {
+				positionMenu()
+			}
+		})
+
+		window.addEventListener('resize', () => {
+			if (open) {
+				positionMenu()
+			}
+		})
+		window.addEventListener('scroll', () => {
+			if (open) {
+				positionMenu()
+			}
+		}, true)
+
+		input.addEventListener('keydown', (event) => {
+			if (event.key === 'ArrowDown') {
+				event.preventDefault()
+				if (!open) {
+					applyFilter(input.value.trim())
+				}
+				if (!visibleUsers.length) {
+					return
+				}
+				activeIndex = (activeIndex + 1) % visibleUsers.length
+				renderMenu(visibleUsers)
+			} else if (event.key === 'ArrowUp') {
+				event.preventDefault()
+				if (!visibleUsers.length) {
+					return
+				}
+				activeIndex = (activeIndex - 1 + visibleUsers.length) % visibleUsers.length
+				renderMenu(visibleUsers)
+			} else if (event.key === 'Enter') {
+				if (open && activeIndex >= 0 && visibleUsers[activeIndex]) {
+					event.preventDefault()
+					selectUser(visibleUsers[activeIndex])
+				}
+			} else if (event.key === 'Escape') {
+				setOpen(false)
+			}
+		})
+
+		input.addEventListener('blur', () => {
+			window.setTimeout(() => {
+				setOpen(false)
+				const typed = input.value.trim()
+				if (!typed) {
+					// Abbruch der Suche: bisherigen Zielbenutzer behalten
+					syncLabelFromHidden()
+					hint.textContent = ''
+					return
+				}
+				const byId = allUsers.find((u) => u.id === typed)
+				const byLabel = allUsers.find((u) => formatUserLabel(u) === typed)
+				const byName = allUsers.find((u) => (u.displayName || '') === typed)
+				const match = byId || byLabel || byName
+				if (match) {
+					selectUser(match)
+					return
+				}
+				if (typed.includes('(') && typed.endsWith(')')) {
+					const id = typed.slice(typed.lastIndexOf('(') + 1, -1).trim()
+					const known = allUsers.find((u) => u.id === id)
+					if (known) {
+						selectUser(known)
+						return
+					}
+				}
+				const partial = allUsers.filter((u) => matchesQuery(u, typed))
+				if (partial.length === 1) {
+					selectUser(partial[0])
+					return
+				}
+				// Freitext-ID erlauben
+				hidden.value = typed
+				hint.textContent = allUsers.some((u) => u.id === typed)
+					? ''
+					: 'Unbekannte User-ID – speichern möglich, Abruf prüft Existenz.'
+			}, 120)
+		})
+
+		hint.textContent = 'Lade Benutzer…'
+		api('GET', '/apps/maildrop/api/users?search=&limit=200')
+			.then((data) => {
+				allUsers = Array.isArray(data.users) ? data.users : []
+				syncLabelFromHidden()
+				hint.textContent = allUsers.length ? '' : 'Keine Benutzer gefunden'
+			})
+			.catch((error) => {
+				hint.textContent = 'Benutzerliste nicht ladbar: ' + (error.message || 'Fehler')
+			})
+	}
+
+	/**
+	 * Nativer Nextcloud-Ordnerdialog (OC.dialogs.filepicker → @nextcloud/dialogs).
+	 * Zeigt die Dateien des angemeldeten Users – nicht zwingend von target_user.
+	 */
+	function pickTargetFolder(setStatus) {
+		if (typeof OC.dialogs === 'undefined' || typeof OC.dialogs.filepicker !== 'function') {
+			setStatus('Ordner-Auswahl ist in dieser Nextcloud-Version nicht verfügbar. Bitte Pfad manuell eintragen.', 'error')
+			return
+		}
+
+		const pathInput = document.getElementById('mf-target-path')
+		const targetUser = document.getElementById('mf-target-user').value.trim()
+		const me = currentUserId()
+		if (targetUser && me && targetUser !== me) {
+			setStatus(
+				'Hinweis: Der Dialog zeigt die Dateien von „' + me + '“, Zielbenutzer ist „' + targetUser + '“. '
+				+ 'Pfad ggf. manuell setzen oder Zielbenutzer auf den angemeldeten Admin stellen.',
+				'info',
+			)
+		}
+
+		let startPath = (pathInput.value || '/').trim() || '/'
+		if (!startPath.startsWith('/')) {
+			startPath = '/' + startPath
+		}
+
+		const type = OC.dialogs.FILEPICKER_TYPE_CHOOSE || 1
+		OC.dialogs.filepicker(
+			'Zielordner wählen',
+			(path) => {
+				let chosen = path || '/'
+				if (!chosen.startsWith('/')) {
+					chosen = '/' + chosen
+				}
+				pathInput.value = chosen
+			},
+			false,
+			['httpd/unix-directory'],
+			true,
+			type,
+			startPath,
+			{ allowDirectoryChooser: true },
+		)
+	}
+
 	function collectPayload() {
 		return {
 			id: selectedId,
@@ -292,7 +594,10 @@
 	}
 
 	async function api(method, url, body) {
-		const response = await fetch(OC.generateUrl(url), {
+		const q = url.indexOf('?')
+		const path = q === -1 ? url : url.slice(0, q)
+		const query = q === -1 ? '' : url.slice(q)
+		const response = await fetch(OC.generateUrl(path) + query, {
 			method,
 			headers: {
 				'Content-Type': 'application/json',

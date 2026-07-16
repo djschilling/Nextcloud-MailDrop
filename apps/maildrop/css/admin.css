@@ -77,6 +77,100 @@
 	max-width: 28rem;
 }
 
+.maildrop-layout,
+.maildrop-editor {
+	overflow: visible;
+}
+
+.maildrop-user-picker {
+	position: relative;
+	max-width: 28rem;
+	overflow: visible;
+}
+
+.maildrop-user-picker__input {
+	width: 100%;
+	max-width: none !important;
+}
+
+.maildrop-user-picker__menu {
+	list-style: none;
+	margin: 0;
+	padding: 0.15rem 0;
+	position: fixed;
+	z-index: 10050;
+	max-height: 11rem;
+	overflow: auto;
+	box-sizing: border-box;
+	border: 1px solid var(--color-border-dark, var(--color-border, #ccc));
+	border-radius: var(--border-radius, 6px);
+	background: var(--color-main-background, #fff);
+	color: var(--color-main-text, inherit);
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.maildrop-user-picker__option {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+	padding: 0.28rem 0.65rem;
+	cursor: pointer;
+	line-height: 1.25;
+}
+
+.maildrop-user-picker__option:hover,
+.maildrop-user-picker__option.is-active {
+	background: var(--color-background-hover, #f0f0f0);
+}
+
+.maildrop-user-picker__name {
+	font-weight: 600;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.maildrop-user-picker__id {
+	flex: 0 0 auto;
+	font-size: 0.85em;
+	opacity: 0.7;
+}
+
+.maildrop-user-picker__empty {
+	padding: 0.6rem 0.75rem;
+	opacity: 0.75;
+	font-size: 0.9em;
+}
+
+.maildrop-path-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	max-width: 36rem;
+}
+
+.maildrop-path-row input[type="text"] {
+	flex: 1 1 14rem;
+	max-width: none;
+	width: auto;
+}
+
+.maildrop-path-row button {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.maildrop-hint {
+	display: block;
+	margin-top: 0.35rem;
+	font-size: 0.9em;
+	opacity: 0.8;
+	max-width: 36rem;
+}
+
 .maildrop-form p {
 	margin: 0.75rem 0;
 }

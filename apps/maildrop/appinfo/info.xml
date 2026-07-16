@@ -13,7 +13,7 @@ Konfigurierbar über die Admin-Einstellungen:
 - Filter nach Betreff/Absender
 - Intervall und Abrufverhalten
 	]]></description>
-	<version>1.2.0</version>
+	<version>1.2.5</version>
 	<licence>agpl</licence>
 	<author mail="dev@localhost">MailDrop</author>
 	<namespace>MailDrop</namespace>
