@@ -97,7 +97,9 @@ Niemals den App-Key `enabled` als Feature-Flag missbrauchen.
 - Jedes Mapping hat eigene IMAP-Daten, Filter, Zielordner, `fetch_enabled`, `last_uid` und Lauf-Status (`last_run` / `last_status` / `last_error`)
 - Legacy-Einzelconfig (flache Keys wie `imap_host`, …) wird beim ersten Lesen automatisch migriert
 - Admin-UI: Liste links, Editor rechts
-- API: `GET/PUT /api/config`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test|fetch` mit optionalem `{id}`
+- Zielbenutzer: kompakte Combobox (Client-Filter); User-Liste via `GET /api/users`; Dropdown an `document.body` (sonst clippt Settings-Layout)
+- Zielordner: Button „Ordner wählen…“ nutzt `OC.dialogs.filepicker` (nativer NC-Dialog, nur Ordner); zeigt Dateien des **angemeldeten** Admins, nicht zwingend von `target_user`
+- API: `GET/PUT /api/config`, `GET /api/users`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test|fetch` mit optionalem `{id}`
 - Tests/Skripte: Mapping-Config über `ConfigService::saveMappings()` setzen – **nicht** über flache `occ config:app:set maildrop imap_*`-Keys
 
 ### Passwort laden vs. speichern

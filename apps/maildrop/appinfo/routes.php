@@ -10,6 +10,11 @@ return [
 			'verb' => 'GET',
 		],
 		[
+			'name' => 'config#searchUsers',
+			'url' => '/api/users',
+			'verb' => 'GET',
+		],
+		[
 			'name' => 'config#save',
 			'url' => '/api/config',
 			'verb' => 'PUT',
