@@ -23,7 +23,9 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 ```bash
 cd apps/maildrop && composer install --no-dev
 cd ../..
-docker compose up -d
+docker compose up -d              # Kern-Stack (db, mail, nextcloud)
+# optional mit Cron + App-Init:
+docker compose --profile full up -d
 ```
 
 Warte, bis Nextcloud bereit ist (erster Start kann 1–2 Minuten dauern):

@@ -13,7 +13,7 @@ jobs:
   mail-to-nextcloud:
     name: SMTP → MailDrop → Nextcloud
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -30,39 +30,48 @@ jobs:
         working-directory: apps/maildrop
         run: composer install --no-dev --optimize-autoloader
 
+      - name: Pull images
+        run: docker compose pull db mail nextcloud
+
       - name: Start Docker stack
-        run: docker compose up -d
+        # Nur die für den E2E nötigen Services – kein cron/app-init (Profile "full").
+        # compose up kehrt zurück, sobald die Container laufen (kein Warten auf NC-Install).
+        run: docker compose up -d db mail nextcloud
 
       - name: Wait for Nextcloud + MailDrop
         run: |
           set -euo pipefail
-          echo "Waiting for Nextcloud health…"
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8080/status.php | grep -q '"installed":true\|"installed": true'; then
-              echo "Nextcloud is installed"
+
+          echo "Waiting for Nextcloud install…"
+          for i in $(seq 1 90); do
+            status="$(curl -fsS http://127.0.0.1:8080/status.php 2>/dev/null || true)"
+            if echo "$status" | grep -qE '"installed"[[:space:]]*:[[:space:]]*true'; then
+              echo "Nextcloud installed after ${i} attempts"
               break
             fi
-            sleep 5
-            if [ "$i" -eq 60 ]; then
+            if [ "$i" -eq 90 ]; then
               echo "Timeout waiting for Nextcloud"
               docker compose ps
-              docker compose logs --tail 100 nextcloud
+              docker compose logs --tail 150 nextcloud db
               exit 1
             fi
+            sleep 2
           done
 
-          echo "Waiting for app-init / maildrop…"
-          for i in $(seq 1 40); do
-            if docker compose exec -T -u www-data nextcloud php occ app:list --enabled 2>/dev/null | grep -q maildrop; then
-              echo "maildrop enabled"
-              exit 0
+          echo "Enabling maildrop…"
+          for i in $(seq 1 30); do
+            if docker compose exec -T -u www-data nextcloud php occ app:enable maildrop 2>/dev/null; then
+              if docker compose exec -T -u www-data nextcloud php occ app:list --enabled 2>/dev/null | grep -q maildrop; then
+                echo "maildrop enabled"
+                docker compose exec -T -u www-data nextcloud php occ background:cron || true
+                exit 0
+              fi
             fi
-            # app-init may still be running
-            docker compose exec -T -u www-data nextcloud php occ app:enable maildrop 2>/dev/null || true
-            sleep 5
+            sleep 2
           done
-          echo "Timeout waiting for maildrop"
-          docker compose logs --tail 100 app-init nextcloud
+
+          echo "Timeout enabling maildrop"
+          docker compose logs --tail 150 nextcloud
           exit 1
 
       - name: Run integration test
@@ -72,7 +81,7 @@ jobs:
         if: failure()
         run: |
           docker compose ps
-          docker compose logs --tail 200 nextcloud mail app-init cron || true
+          docker compose logs --tail 200 nextcloud mail db || true
           docker compose exec -T -u www-data nextcloud php occ config:list maildrop || true
           docker compose exec -T -u www-data nextcloud tail -n 100 /var/www/html/data/nextcloud.log || true
 
