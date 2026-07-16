@@ -165,6 +165,19 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 | Dependencies | `composer.json` / `composer.lock` committen, nicht `vendor/` |
 | CI-Install kaputt | Bind-Mount vs. `docker-compose.ci.yml` prüfen; App per `compose cp` |
 
+## Releases
+
+```bash
+# Version in info.xml setzen (optional) und Tarball bauen – inkl. vendor/
+./scripts/build-release.sh 1.0.0
+# → dist/maildrop-1.0.0.tar.gz (+ .sha256)
+```
+
+- Archiv-Root muss der App-Ordner `maildrop/` sein
+- `vendor/` gehört **ins** Release (gitignored im Repo)
+- GitHub Release: Tag `vX.Y.Z`, Asset = gebautes Archiv
+- App-Version in `apps/maildrop/appinfo/info.xml` muss zum Tag passen
+
 ## Nicht tun
 
 - Keine Exploits/Malware, keine Secrets committen
@@ -173,3 +186,4 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - App-Config-Key nicht `enabled` für Feature-Flags missbrauchen
 - Gespeicherte Mapping-Passwörter nicht nochmal durch `normalizeMapping()` / `encrypt()` jagen
 - In CI den lokalen `./apps`-Bind-Mount nicht wieder aktivieren (bricht Linux-Install)
+- Release-Archive ohne `vendor/` veröffentlichen
