@@ -146,6 +146,10 @@ flowchart LR
   UI[Admin UI] --> Job
 ```
 
+## Lizenz
+
+MIT © David Schilling (`davejs92@gmail.com`) — siehe [LICENSE](LICENSE).
+
 ## Produktionshinweise
 
 - IMAP-Zugangsdaten werden mit Nextclouds Crypto-API verschlüsselt gespeichert.

@@ -1,7 +1,13 @@
 {
 	"name": "nextcloud/maildrop",
 	"description": "Nextcloud MailDrop – receive emails with attachments and store them in Nextcloud",
-	"license": "AGPL-3.0-or-later",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "David Schilling",
+			"email": "davejs92@gmail.com"
+		}
+	],
 	"autoload": {
 		"psr-4": {
 			"OCA\\MailDrop\\": "lib/"
