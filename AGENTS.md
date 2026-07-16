@@ -6,25 +6,32 @@ Notes for AI agents working in this repository.
 
 **Nextcloud MailDrop** is a Nextcloud app that fetches email via **IMAP**, extracts attachments, and stores them in Nextcloud Files. Configuration is done in the admin UI.
 
-| Context | Name |
-|---------|------|
+| Context | Value |
+|---------|--------|
 | Display name (UI) | MailDrop |
 | App ID | `maildrop` |
 | PHP namespace | `OCA\MailDrop` |
 | App path | `apps/maildrop/` |
 | GitHub | `djschilling/Nextcloud-MailDrop` |
+| License | MIT (`LICENSE`, `apps/maildrop/LICENSE`) |
+| Author | David Schilling `<davejs92@gmail.com>` |
+| Current version | see `apps/maildrop/appinfo/info.xml` (released tags: `v1.0.0`, `v1.0.1`, `v1.1.0`, `v1.1.1`) |
+| Changelog | `apps/maildrop/CHANGELOG.md` |
 
 ## Tech stack
 
-- Nextcloud 28–34 (Docker dev: `nextcloud:34-apache`)
+- Nextcloud 28–34 (Docker dev image often `nextcloud:31-apache` or `34-apache`)
 - PHP 8.1–8.4 (set `max-version` to **8.5** in `info.xml` – Nextcloud treats PHP `max-version` as exclusive)
 - IMAP via `webklex/php-imap` (Composer, **no** php-imap extension)
-- Attachments default **flat** in the target folder: `{Ymd_His}_uid{N}_{filename}`
-- Optional: `create_mail_folder` (per-mail subfolder), `save_mail_file` (`.eml` next to attachments) – both off by default
+- Attachments default **flat**: `{Ymd_His}_uid{N}_{filename}` via `AttachmentNamer`
+- Optional: `create_mail_folder`, `save_mail_file` – both **false** by default
 - Cursor: `last_uid` + `uidvalidity` (reset when UIDVALIDITY changes); config writes under lock
+- UID fetch: **`getByUidGreater($lastUid)`** – do **not** use `whereUid('N:*')` (IONOS rejects it → silent empty fetch, cursor stays 0)
+- Limits: `max_attachment_bytes` (default 25 MiB), `imap_validate_cert` (default true)
 - MariaDB, GreenMail (SMTP 3025 / IMAP 3143)
 - Admin UI: plain JS + Nextcloud Settings API (no Vue build)
-- E2E: Python 3 (stdlib only)
+- l10n: English source strings + `l10n/en.*` / `l10n/de.*`
+- E2E: Python 3 (stdlib only); unit: `tests/Unit/AttachmentNamerTest.php`
 
 ## Important commands
 
@@ -43,7 +50,11 @@ docker compose down -v             # reset including data
 # App / occ (in container)
 docker compose exec -u www-data nextcloud php occ app:enable maildrop
 docker compose exec -u www-data nextcloud php occ maildrop:fetch
+docker compose exec -u www-data nextcloud php occ maildrop:fetch -m <mapping-id>
 docker compose exec -u www-data nextcloud php occ upgrade
+
+# Unit test
+php apps/maildrop/tests/Unit/AttachmentNamerTest.php
 
 # Manual test mail
 python3 scripts/send-test-mail.py
@@ -52,6 +63,10 @@ python3 scripts/send-test-mail.py
 ./tests/integration/run.sh
 # or:
 python3 tests/integration/test_mail_to_nextcloud.py
+
+# Release tarball
+./scripts/build-release.sh          # version from info.xml
+./scripts/build-release.sh 1.1.1    # set version + build
 ```
 
 Local URLs: Nextcloud http://localhost:8080 (`admin`/`admin`), GreenMail IMAP `maildrop`/`maildrop`.
@@ -68,16 +83,24 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 
 | Path | Role |
 |------|------|
-| `appinfo/info.xml` | Metadata, jobs, settings, commands – **bump version** on changes |
+| `appinfo/info.xml` | Metadata, jobs, settings, commands – **bump version** on structural changes |
+| `appinfo/routes.php` | REST routes for admin API |
 | `lib/AppInfo/Application.php` | Bootstrap + Composer autoload |
-| `lib/Service/ConfigService.php` | App config (encrypted IMAP password) |
+| `lib/Service/ConfigService.php` | App config (encrypted IMAP password, locks, cursor) |
 | `lib/Service/MailFetchService.php` | IMAP, attachments, store in Files |
+| `lib/Service/AttachmentNamer.php` | Filename sanitize / flat prefix helper |
 | `lib/BackgroundJob/FetchMailJob.php` | TimedJob every 300s |
-| `lib/Command/FetchCommand.php` | `occ maildrop:fetch` |
+| `lib/Command/FetchCommand.php` | `occ maildrop:fetch` (`-m` optional) |
 | `lib/Controller/ConfigController.php` | REST API for admin UI |
-| `lib/Settings/` | Admin section + form |
-| `js/admin.js` / `css/admin.css` | Settings UI |
-| `l10n/*.json` / `l10n/*.js` | UI translations (source language: English; `de` + `en`) |
+| `lib/Settings/` | Admin section + form (`Util::addTranslations`) |
+| `js/admin.js` / `css/admin.css` | Settings UI (`t('maildrop', …)`) |
+| `l10n/*.json` / `l10n/*.js` | Translations (`en`, `de`); keep both `.json` and `.js` in sync |
+| `CHANGELOG.md` / `LICENSE` | App Store / release metadata |
+| `tests/Unit/` | Unit tests (also run in CI) |
+
+### Mapping fields (persist in app config `mappings` JSON)
+
+Important keys: `id`, `name`, `fetch_enabled`, IMAP fields (`imap_host`, `imap_port`, `imap_encryption`, `imap_validate_cert`, `imap_user`, `imap_password`, `imap_folder`), `target_user`, `target_path`, `subject_filter`, `sender_filter`, `max_attachment_bytes`, `create_mail_folder`, `save_mail_file`, `mark_as_seen`, `delete_after_import`, runtime: `last_uid`, `uidvalidity`, `last_run`, `last_status`, `last_error`.
 
 ### Docker
 
@@ -86,6 +109,7 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 - Local: app via bind-mount `./apps` → `/var/www/html/custom_apps`
 - `app-init` enables `maildrop` after first install (profile `full` only)
 - Nextcloud healthcheck only checks Apache/`status.php` – not “installed”, so `compose up` does not hang on cron/app-init
+- `docker-compose.ci.yml`: replaces apps bind-mount; CI copies the app with `docker compose cp`
 
 ## Critical rules
 
@@ -99,19 +123,32 @@ Never misuse the app key `enabled` as a feature flag.
 ### Multiple mappings
 
 - Stored as JSON in app config `mappings`
-- Each mapping has its own IMAP data, filters, target folder, `fetch_enabled`, `last_uid`, and run status (`last_run` / `last_status` / `last_error`)
+- Each mapping has its own IMAP data, filters, target folder, `fetch_enabled`, cursor, and run status
 - Legacy single-config (flat keys like `imap_host`, …) is migrated automatically on first read
 - Admin UI: list on the left, editor on the right
-- Target user: compact combobox (client filter); user list via `GET /api/users`; dropdown on `document.body` (otherwise the settings layout clips it)
-- Target folder: “Choose folder…” uses `OC.dialogs.filepicker` (native NC dialog, folders only); shows files of the **logged-in** admin, not necessarily `target_user`
-- API: `GET/PUT /api/config`, `GET /api/users`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test|fetch` with optional `{id}`
-- Tests/scripts: set mapping config via `ConfigService::saveMappings()` – **not** via flat `occ config:app:set maildrop imap_*` keys
+- Target user: compact combobox; `GET /api/users`; dropdown on `document.body` (settings layout clips otherwise)
+- Target folder: `OC.dialogs.filepicker` (folders only); shows files of the **logged-in** admin, not necessarily `target_user`
+- API: `GET/PUT /api/config`, `GET /api/users`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test`, `POST /api/fetch`, `POST /api/mappings/{id}/reset-cursor`
+- Tests/scripts: configure via `ConfigService::saveMappings()` – **not** flat `occ config:app:set maildrop imap_*`
+
+### IMAP UID search
+
+- Use `$mailbox->messages()->leaveUnread()->setFetchOrder('asc')->getByUidGreater($lastUid)`
+- Catch empty/error → treat as no messages; still write `uidvalidity` / status
+- Cursor advances after each message (including “no attachments” skips)
 
 ### Loading vs saving passwords
 
-- **`hydrateMapping()`**: read from stored JSON – password stays as stored (already encrypted), **do not** encrypt again
-- **`normalizeMapping()`**: only when saving/creating – encrypt plaintext password; empty client value → keep previous password
-- Double-encrypting on load breaks IMAP login (common pitfall when refactoring ConfigService)
+- **`hydrateMapping()`**: read from stored JSON – password already encrypted, **do not** encrypt again
+- **`normalizeMapping()`**: only when saving/creating – encrypt plaintext; empty client value → keep previous
+- Double-encrypting on load breaks IMAP login
+
+### Localization
+
+- English is the **source** language in PHP (`$l10n->t('…')`) and JS (`t('maildrop', '…')`)
+- When adding UI/API user-visible strings: update `l10n/en.json` + `en.js` and `l10n/de.json` + `de.js`
+- Load translations in admin form via `Util::addTranslations(Application::APP_ID)` before `addScript`
+- Do not hardcode German (or any language) in `admin.js` again
 
 ### Registering settings
 
@@ -124,33 +161,35 @@ Never misuse the app key `enabled` as a feature flag.
 - `apps/maildrop/vendor/` is gitignored
 - Always run `composer install` in the app directory before Docker start and in CI
 - Autoload is loaded in `Application::__construct()`
+- Release archives **must** include `vendor/`
 
 ### Passwords
 
 - Store IMAP password encrypted only (`OCP\Security\ICrypto`)
-- Never return it to the client in API responses (`imap_password_set` instead of plaintext)
+- Never return it to the client (`imap_password_set` instead of plaintext)
 
 ## Coding conventions
 
 - PHP: `declare(strict_types=1);`, namespace `OCA\MailDrop\...`
-- Prefer Nextcloud OCP interfaces (`IRootFolder`, `IConfig`, …)
+- Prefer Nextcloud OCP interfaces (`IRootFolder`, `IConfig`, `IL10N`, …)
 - Focused diffs: no unnecessary refactors, no unsolicited markdown docs
 - User-facing chat replies: **German**
 - Commits/PRs: only when explicitly requested; PR body in English is fine
-- Repository documentation (`README`, `AGENTS`, `info.xml` texts): **English**
+- Repository documentation (`README`, `AGENTS`, `info.xml` texts, CHANGELOG): **English**
+- Do not commit `nextcloud-server.md` or other local server notes / secrets
 
 ## Tests & CI
 
+- Unit: `apps/maildrop/tests/Unit/AttachmentNamerTest.php` (CI runs this)
 - E2E: `tests/integration/test_mail_to_nextcloud.py`
-  - real SMTP mail → GreenMail → `occ maildrop:fetch` → WebDAV assertion
-  - configures a mapping via `ConfigService::saveMappings()` (including `fetch_enabled`)
-- E2E target folder: `/MailDrop-Integration` (ASCII, reliable for WebDAV)
+  - SMTP → GreenMail → `occ maildrop:fetch` → WebDAV
+  - scenarios: `flat-default`, `mail-folder`, `save-mail-file`, `folder-and-eml`
+  - configures mapping via `ConfigService::saveMappings()` (incl. `fetch_enabled`, storage flags)
 - CI: `.github/workflows/integration.yml`
   - `COMPOSE_FILE=docker-compose.yml:docker-compose.ci.yml`
-  - starts only `db` / `mail` / `nextcloud` (no profile `full`)
-  - `docker-compose.ci.yml` replaces the app bind-mount with an empty volume – otherwise Nextcloud first install fails on Linux with “Cannot write into apps”
-  - App is copied with `docker compose cp` into `custom_apps/maildrop` and enabled with `occ app:enable`
-  - Do not change CI workflows / compose overrides just to make checks green
+  - services: `db` / `mail` / `nextcloud` only
+  - app via `docker compose cp` → `custom_apps/maildrop` + `occ app:enable`
+  - do not re-enable the local `./apps` bind-mount in CI
 
 When fetch/tests fail, check:
 
@@ -164,25 +203,26 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 
 | Task | Approach |
 |------|----------|
-| Change IMAP logic | `MailFetchService.php`, run E2E |
-| Mapping fields / persistence | `ConfigService` (`hydrate` vs `normalize`), then update UI + E2E |
-| Extend admin UI | `ConfigService` + `ConfigController` + `js/admin.js` |
-| New occ command | Class under `lib/Command/`, register in `info.xml`, bump version |
+| Change IMAP / storage logic | `MailFetchService.php` (+ `AttachmentNamer` if names), run unit + E2E |
+| Mapping fields / persistence | `ConfigService` (`hydrate` vs `normalize`), UI + E2E + l10n |
+| Extend admin UI | `ConfigService` + `ConfigController` + `js/admin.js` + `l10n/*` |
+| New user-visible string | English source + update `en`/`de` json **and** js |
+| New occ command | `lib/Command/`, register in `info.xml`, bump version |
 | Dependencies | Commit `composer.json` / `composer.lock`, not `vendor/` |
-| Broken CI install | Check bind-mount vs `docker-compose.ci.yml`; copy app via `compose cp` |
+| Broken CI install | Bind-mount vs `docker-compose.ci.yml`; `compose cp` |
+| Release | bump `info.xml` + `CHANGELOG.md`, `build-release.sh`, GitHub tag `vX.Y.Z` |
 
 ## Releases
 
 ```bash
-# Optionally set version in info.xml and build tarball – includes vendor/
-./scripts/build-release.sh 1.0.0
-# → dist/maildrop-1.0.0.tar.gz (+ .sha256)
+./scripts/build-release.sh 1.1.1
+# → dist/maildrop-1.1.1.tar.gz (+ .sha256)
 ```
 
-- Archive root must be the app folder `maildrop/`
-- `vendor/` belongs **in** the release (gitignored in the repo)
-- GitHub release: tag `vX.Y.Z`, asset = built archive
-- App version in `apps/maildrop/appinfo/info.xml` must match the tag
+- Archive root must be `maildrop/`
+- Include `vendor/`, `l10n/`, `LICENSE`, `CHANGELOG.md`
+- GitHub release tag `vX.Y.Z` must match `info.xml` version
+- Do not put server install helpers with secrets into this repo
 
 ## Do not
 
@@ -190,6 +230,8 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - Avoid `git push --force` on `main`
 - Docker volumes (`down -v`) only when intentional data loss is OK
 - Do not misuse app config key `enabled` for feature flags
-- Do not run stored mapping passwords through `normalizeMapping()` / `encrypt()` again
-- Do not re-enable the local `./apps` bind-mount in CI (breaks Linux install)
+- Do not re-encrypt stored mapping passwords on load
+- Do not use `whereUid('N:*')` for IMAP ranges
+- Do not re-enable the local `./apps` bind-mount in CI
 - Do not publish release archives without `vendor/`
+- Do not leave hardcoded UI language strings outside l10n
