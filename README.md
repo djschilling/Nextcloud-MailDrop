@@ -1,165 +1,165 @@
 # Nextcloud MailDrop
 
-Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge und speichert sie in einem konfigurierbaren Ordner. Konfiguration über die Admin-UI.
+Nextcloud app **MailDrop**: fetches email via **IMAP**, extracts attachments, and stores them in a configurable folder. Configuration is done in the admin UI.
 
 ## Features
 
-- Mehrere Mapping-Konfigurationen (IMAP → Zielordner), jeweils einzeln aktivierbar
-- IMAP-Abruf (inkl. optional SSL/TLS)
-- Anhänge landen standardmäßig flach im Zielordner (Dateiname mit Zeitstempel-Prefix); optional Unterordner pro Mail und/oder Speichern der .eml
-- Filter nach Betreff und Absender
-- TLS-Zertifikatsprüfung und Größenlimit für Anhänge konfigurierbar
-- IMAP-Cursor (`last_uid` / UIDVALIDITY) mit Reset in der UI
-- Nachrichten als gelesen markieren oder nach Import löschen
-- Verbindungstest und manueller Abruf pro Mapping oder für alle (`occ maildrop:fetch -m <id>`)
-- Hintergrund-Job alle 5 Minuten
+- Multiple mapping configurations (IMAP → target folder), each independently enableable
+- IMAP fetch (optional SSL/TLS)
+- Attachments land flat in the target folder by default (timestamp-prefixed filename); optional per-mail subfolders and/or saving the `.eml`
+- Subject and sender filters
+- Configurable TLS certificate validation and attachment size limit
+- IMAP cursor (`last_uid` / UIDVALIDITY) with reset in the UI
+- Mark messages as seen or delete after import
+- Connection test and manual fetch per mapping or for all (`occ maildrop:fetch -m <id>`)
+- Background job every 5 minutes
 
-## Installation (andere Nextcloud-Instanz)
+## Installation (other Nextcloud instance)
 
-Voraussetzungen: Nextcloud **28–34**, PHP **8.1–8.4**, funktionierender System-Cron, ausgehender IMAP-Zugriff.
+Requirements: Nextcloud **28–34**, PHP **8.1–8.4**, working system cron, outbound IMAP access.
 
-### Aus GitHub-Release
+### From a GitHub release
 
-1. Release-Archiv laden: [Releases](https://github.com/djschilling/Nextcloud-MailDrop/releases) → `maildrop-x.y.z.tar.gz`
-2. Auf dem Server nach `custom_apps/` entpacken (Ordner muss `maildrop` heißen):
+1. Download the release archive: [Releases](https://github.com/djschilling/Nextcloud-MailDrop/releases) → `maildrop-x.y.z.tar.gz`
+2. Extract into `custom_apps/` on the server (folder must be named `maildrop`):
 
 ```bash
-sudo tar -xzf maildrop-1.1.0.tar.gz -C /path/to/nextcloud/custom_apps/
+sudo tar -xzf maildrop-1.1.1.tar.gz -C /path/to/nextcloud/custom_apps/
 sudo chown -R www-data:www-data /path/to/nextcloud/custom_apps/maildrop
 ```
 
-3. App aktivieren:
+3. Enable the app:
 
 ```bash
 sudo -u www-data php /path/to/nextcloud/occ app:enable maildrop
 ```
 
-4. In Nextcloud: **Einstellungen → Administration → MailDrop** konfigurieren.
+4. In Nextcloud: **Settings → Administration → MailDrop**.
 
-### Release selbst bauen
+### Build a release yourself
 
 ```bash
-./scripts/build-release.sh          # Version aus apps/maildrop/appinfo/info.xml
-# oder:
-./scripts/build-release.sh 1.1.0    # setzt Version in info.xml und baut
+./scripts/build-release.sh          # version from apps/maildrop/appinfo/info.xml
+# or:
+./scripts/build-release.sh 1.1.1    # set version in info.xml and build
 ```
 
-Ergebnis: `dist/maildrop-<version>.tar.gz` (inkl. `vendor/`) und optional `.sha256`.
+Output: `dist/maildrop-<version>.tar.gz` (includes `vendor/`) and optional `.sha256`.
 
-## Lokales Setup (Docker)
+## Local setup (Docker)
 
-### Voraussetzungen
+### Requirements
 
 - Docker + Docker Compose
-- Python 3 (nur für das Testmail-Skript)
+- Python 3 (only for the test-mail script)
 
-### Starten
+### Start
 
 ```bash
 cd apps/maildrop && composer install --no-dev
 cd ../..
-docker compose up -d              # Kern-Stack (db, mail, nextcloud)
-# optional mit Cron + App-Init:
+docker compose up -d              # core stack (db, mail, nextcloud)
+# optional with cron + app init:
 docker compose --profile full up -d
 ```
 
-Warte, bis Nextcloud bereit ist (erster Start kann 1–2 Minuten dauern):
+Wait until Nextcloud is ready (first start can take 1–2 minutes):
 
 ```bash
 docker compose ps
-# App manuell enablen (ohne Profile full):
+# enable the app manually (without profile full):
 docker compose exec -u www-data nextcloud php occ app:enable maildrop
 ```
 
-Danach:
+Then:
 
-| Dienst | URL / Port | Zugangsdaten |
-|--------|------------|--------------|
+| Service | URL / port | Credentials |
+|---------|------------|-------------|
 | Nextcloud | http://localhost:8080 | `admin` / `admin` |
 | GreenMail SMTP | localhost:3025 | – |
 | GreenMail IMAP | localhost:3143 | `maildrop` / `maildrop` |
 | GreenMail Web | http://localhost:8081 | – |
 
-Mit `docker compose --profile full up -d` starten zusätzlich Cron und `app-init` (Auto-Enable).
+With `docker compose --profile full up -d`, cron and `app-init` (auto-enable) also start.
 
-### App konfigurieren
+### Configure the app
 
-1. In Nextcloud einloggen: http://localhost:8080
-2. **Einstellungen → Administration → MailDrop**
-3. Werte für das lokale Setup (bereits sinnvoll vorausgefüllt):
+1. Log in to Nextcloud: http://localhost:8080
+2. **Settings → Administration → MailDrop**
+3. Values for the local setup (sensible defaults):
 
    - Host: `mail`
    - Port: `3143`
-   - Verschlüsselung: `Keine`
-   - Benutzer / Passwort: `maildrop` / `maildrop`
-   - Zielbenutzer: `admin`
-   - Zielordner: `/Mail-Anhänge`
-   - Abruf aktivieren: an
+   - Encryption: `None`
+   - User / password: `maildrop` / `maildrop`
+   - Target user: `admin`
+   - Target folder: `/Mail-Anhänge`
+   - Enable fetch: on
 
-4. **Verbindung testen**, dann **Speichern**
+4. **Test connection**, then **Save**
 
-### Test-E-Mail senden
+### Send a test email
 
 ```bash
 python3 scripts/send-test-mail.py
-# oder mit eigener Datei:
+# or with a custom file:
 python3 scripts/send-test-mail.py --file ./README.md
 ```
 
-Anschließend in der Admin-UI **Jetzt abrufen** klicken (oder ~5 Minuten auf den Cron-Job warten). Die Anhänge erscheinen unter **Dateien → Mail-Anhänge**.
+Then click **Fetch now** in the admin UI (or wait ~5 minutes for the cron job). Attachments appear under **Files → Mail-Anhänge**.
 
-## Integrationstest (E2E)
+## Integration test (E2E)
 
-Der Test sendet eine echte E-Mail an GreenMail, lässt MailDrop abrufen und prüft per WebDAV, dass der Anhang in Nextcloud liegt.
+The test sends a real email to GreenMail, runs MailDrop fetch, and checks via WebDAV that the attachment is in Nextcloud.
 
 ```bash
-# Dependencies + Stack (falls noch nicht laufend)
+# Dependencies + stack (if not already running)
 cd apps/maildrop && composer install --no-dev && cd ../..
 docker compose up -d
 
 # Test
 ./tests/integration/run.sh
-# oder:
+# or:
 python3 tests/integration/test_mail_to_nextcloud.py
 ```
 
-In GitHub Actions läuft derselbe Test über `.github/workflows/integration.yml`.
+The same test runs in GitHub Actions via `.github/workflows/integration.yml`.
 
-## Projektstruktur
+## Project structure
 
 ```
-apps/maildrop/              # Nextcloud-App MailDrop
-docker/nextcloud/           # Init-Skript
+apps/maildrop/              # Nextcloud MailDrop app
+docker/nextcloud/           # Init script
 docker-compose.yml          # Nextcloud, MariaDB, Cron, GreenMail
 scripts/send-test-mail.py
-scripts/build-release.sh    # Release-Tarball inkl. vendor/
-dist/                       # Build-Ausgabe (gitignored)
+scripts/build-release.sh    # Release tarball including vendor/
+dist/                       # Build output (gitignored)
 ```
 
-## Architektur (kurz)
+## Architecture (short)
 
 ```mermaid
 flowchart LR
-  SMTP[Testmail / echter SMTP] --> GreenMail[GreenMail IMAP]
-  GreenMail --> Job[MailDrop Background Job]
-  Job --> NC[Nextcloud Dateien]
+  SMTP[Test mail / real SMTP] --> GreenMail[GreenMail IMAP]
+  GreenMail --> Job[MailDrop background job]
+  Job --> NC[Nextcloud Files]
   UI[Admin UI] --> Job
 ```
 
-## Lizenz
+## License
 
-MIT © David Schilling (`davejs92@gmail.com`) — siehe [LICENSE](LICENSE).
+MIT © David Schilling (`davejs92@gmail.com`) — see [LICENSE](LICENSE).
 
-## Produktionshinweise
+## Production notes
 
-- IMAP-Zugangsdaten werden mit Nextclouds Crypto-API verschlüsselt gespeichert.
-- Für echte Postfächer SSL/TLS und starke Passwörter nutzen.
-- Zielordner und Benutzer gezielt setzen; optional Betreff-/Absenderfilter.
+- IMAP credentials are stored encrypted via Nextcloud’s crypto API.
+- Use SSL/TLS and strong passwords for real mailboxes.
+- Set target folder and user deliberately; optional subject/sender filters.
 
-## Stoppen / Zurücksetzen
+## Stop / reset
 
 ```bash
 docker compose down
-# inkl. aller Daten:
+# including all data:
 docker compose down -v
 ```
