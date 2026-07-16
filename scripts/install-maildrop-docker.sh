@@ -70,18 +70,33 @@ else
 fi
 
 echo "==> Extracting archive"
-tar -tzf "$TMP_DIR/$ARCHIVE" | head -n1 | grep -q '^maildrop/' || {
-	echo "error: archive must contain top-level folder maildrop/" >&2
-	exit 1
-}
 mkdir -p "$TMP_DIR/extract"
 tar -xzf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR/extract"
+
+APP_SRC=""
+if [[ -d "$TMP_DIR/extract/maildrop" ]]; then
+	APP_SRC="$TMP_DIR/extract/maildrop"
+elif [[ -d "$TMP_DIR/extract/./maildrop" ]]; then
+	APP_SRC="$TMP_DIR/extract/maildrop"
+else
+	# Falls das Archiv ohne Top-Level-Ordner gebaut wurde
+	if [[ -f "$TMP_DIR/extract/appinfo/info.xml" ]]; then
+		APP_SRC="$TMP_DIR/extract"
+	fi
+fi
+
+if [[ -z "$APP_SRC" || ! -f "$APP_SRC/appinfo/info.xml" ]]; then
+	echo "error: archive must contain app folder maildrop/ (with appinfo/info.xml)" >&2
+	echo "archive top-level entries:" >&2
+	ls -la "$TMP_DIR/extract" >&2 || true
+	exit 1
+fi
 
 echo "==> Installing into container '${SERVICE}:/var/www/html/custom_apps/maildrop'"
 docker compose exec -u root "$SERVICE" mkdir -p /var/www/html/custom_apps
 # Alten Stand entfernen, dann frisch kopieren
 docker compose exec -u root "$SERVICE" rm -rf /var/www/html/custom_apps/maildrop
-docker compose cp "$TMP_DIR/extract/maildrop/." "${SERVICE}:/var/www/html/custom_apps/maildrop/"
+docker compose cp "$APP_SRC/." "${SERVICE}:/var/www/html/custom_apps/maildrop/"
 docker compose exec -u root "$SERVICE" chown -R www-data:www-data /var/www/html/custom_apps/maildrop
 
 echo "==> Enabling app"
