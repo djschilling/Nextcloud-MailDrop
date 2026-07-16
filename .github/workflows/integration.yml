@@ -1,0 +1,81 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mail-to-nextcloud:
+    name: SMTP → MailDrop → Nextcloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP / Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer
+          coverage: none
+
+      - name: Install app dependencies
+        working-directory: apps/maildrop
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Start Docker stack
+        run: docker compose up -d
+
+      - name: Wait for Nextcloud + MailDrop
+        run: |
+          set -euo pipefail
+          echo "Waiting for Nextcloud health…"
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/status.php | grep -q '"installed":true\|"installed": true'; then
+              echo "Nextcloud is installed"
+              break
+            fi
+            sleep 5
+            if [ "$i" -eq 60 ]; then
+              echo "Timeout waiting for Nextcloud"
+              docker compose ps
+              docker compose logs --tail 100 nextcloud
+              exit 1
+            fi
+          done
+
+          echo "Waiting for app-init / maildrop…"
+          for i in $(seq 1 40); do
+            if docker compose exec -T -u www-data nextcloud php occ app:list --enabled 2>/dev/null | grep -q maildrop; then
+              echo "maildrop enabled"
+              exit 0
+            fi
+            # app-init may still be running
+            docker compose exec -T -u www-data nextcloud php occ app:enable maildrop 2>/dev/null || true
+            sleep 5
+          done
+          echo "Timeout waiting for maildrop"
+          docker compose logs --tail 100 app-init nextcloud
+          exit 1
+
+      - name: Run integration test
+        run: python3 tests/integration/test_mail_to_nextcloud.py
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail 200 nextcloud mail app-init cron || true
+          docker compose exec -T -u www-data nextcloud php occ config:list maildrop || true
+          docker compose exec -T -u www-data nextcloud tail -n 100 /var/www/html/data/nextcloud.log || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

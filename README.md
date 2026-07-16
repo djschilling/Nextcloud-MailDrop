@@ -70,6 +70,23 @@ python3 scripts/send-test-mail.py --file ./README.md
 
 Anschließend in der Admin-UI **Jetzt abrufen** klicken (oder ~5 Minuten auf den Cron-Job warten). Die Anhänge erscheinen unter **Dateien → Mail-Anhänge**.
 
+## Integrationstest (E2E)
+
+Der Test sendet eine echte E-Mail an GreenMail, lässt MailDrop abrufen und prüft per WebDAV, dass der Anhang in Nextcloud liegt.
+
+```bash
+# Dependencies + Stack (falls noch nicht laufend)
+cd apps/maildrop && composer install --no-dev && cd ../..
+docker compose up -d
+
+# Test
+./tests/integration/run.sh
+# oder:
+python3 tests/integration/test_mail_to_nextcloud.py
+```
+
+In GitHub Actions läuft derselbe Test über `.github/workflows/integration.yml`.
+
 ## Projektstruktur
 
 ```
