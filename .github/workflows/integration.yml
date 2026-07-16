@@ -33,6 +33,10 @@ jobs:
         working-directory: apps/maildrop
         run: composer install --no-dev --optimize-autoloader
 
+      - name: Unit tests
+        working-directory: apps/maildrop
+        run: php tests/Unit/AttachmentNamerTest.php
+
       - name: Pull images
         run: docker compose pull db mail nextcloud
 

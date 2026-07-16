@@ -114,4 +114,12 @@ class ConfigController extends Controller {
 		$status = $result['success'] ? Http::STATUS_OK : Http::STATUS_BAD_REQUEST;
 		return new DataResponse($result, $status);
 	}
+
+	public function resetCursor(string $id): DataResponse {
+		$mapping = $this->configService->resetMappingCursor($id);
+		if ($mapping === null) {
+			return new DataResponse(['message' => 'Mapping nicht gefunden.'], Http::STATUS_NOT_FOUND);
+		}
+		return new DataResponse($mapping);
+	}
 }

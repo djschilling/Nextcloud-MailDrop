@@ -6,10 +6,12 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 
 - Mehrere Mapping-Konfigurationen (IMAP → Zielordner), jeweils einzeln aktivierbar
 - IMAP-Abruf (inkl. optional SSL/TLS)
-- Anhänge landen unter einem wählbaren Benutzer/Pfad
+- Anhänge landen standardmäßig flach im Zielordner (Dateiname mit Zeitstempel-Prefix); optional Unterordner pro Mail und/oder Speichern der .eml
 - Filter nach Betreff und Absender
+- TLS-Zertifikatsprüfung und Größenlimit für Anhänge konfigurierbar
+- IMAP-Cursor (`last_uid` / UIDVALIDITY) mit Reset in der UI
 - Nachrichten als gelesen markieren oder nach Import löschen
-- Verbindungstest und manueller Abruf pro Mapping oder für alle
+- Verbindungstest und manueller Abruf pro Mapping oder für alle (`occ maildrop:fetch -m <id>`)
 - Hintergrund-Job alle 5 Minuten
 
 ## Installation (andere Nextcloud-Instanz)
@@ -22,7 +24,7 @@ Voraussetzungen: Nextcloud **28–34**, PHP **8.1–8.4**, funktionierender Syst
 2. Auf dem Server nach `custom_apps/` entpacken (Ordner muss `maildrop` heißen):
 
 ```bash
-sudo tar -xzf maildrop-1.0.1.tar.gz -C /path/to/nextcloud/custom_apps/
+sudo tar -xzf maildrop-1.1.0.tar.gz -C /path/to/nextcloud/custom_apps/
 sudo chown -R www-data:www-data /path/to/nextcloud/custom_apps/maildrop
 ```
 
@@ -39,7 +41,7 @@ sudo -u www-data php /path/to/nextcloud/occ app:enable maildrop
 ```bash
 ./scripts/build-release.sh          # Version aus apps/maildrop/appinfo/info.xml
 # oder:
-./scripts/build-release.sh 1.0.1    # setzt Version in info.xml und baut
+./scripts/build-release.sh 1.1.0    # setzt Version in info.xml und baut
 ```
 
 Ergebnis: `dist/maildrop-<version>.tar.gz` (inkl. `vendor/`) und optional `.sha256`.
