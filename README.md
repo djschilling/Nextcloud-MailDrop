@@ -14,7 +14,7 @@ Nextcloud-App **MailDrop**: holt E-Mails per **IMAP** ab, extrahiert Anhänge un
 
 ## Installation (andere Nextcloud-Instanz)
 
-Voraussetzungen: Nextcloud **28–31**, PHP **8.1–8.4**, funktionierender System-Cron, ausgehender IMAP-Zugriff.
+Voraussetzungen: Nextcloud **28–34**, PHP **8.1–8.4**, funktionierender System-Cron, ausgehender IMAP-Zugriff.
 
 ### Aus GitHub-Release
 
@@ -22,7 +22,7 @@ Voraussetzungen: Nextcloud **28–31**, PHP **8.1–8.4**, funktionierender Syst
 2. Auf dem Server nach `custom_apps/` entpacken (Ordner muss `maildrop` heißen):
 
 ```bash
-sudo tar -xzf maildrop-1.0.0.tar.gz -C /path/to/nextcloud/custom_apps/
+sudo tar -xzf maildrop-1.0.1.tar.gz -C /path/to/nextcloud/custom_apps/
 sudo chown -R www-data:www-data /path/to/nextcloud/custom_apps/maildrop
 ```
 
@@ -39,7 +39,7 @@ sudo -u www-data php /path/to/nextcloud/occ app:enable maildrop
 ```bash
 ./scripts/build-release.sh          # Version aus apps/maildrop/appinfo/info.xml
 # oder:
-./scripts/build-release.sh 1.0.0    # setzt Version in info.xml und baut
+./scripts/build-release.sh 1.0.1    # setzt Version in info.xml und baut
 ```
 
 Ergebnis: `dist/maildrop-<version>.tar.gz` (inkl. `vendor/`) und optional `.sha256`.
