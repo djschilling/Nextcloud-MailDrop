@@ -1,14 +1,19 @@
 /**
- * MailDrop – Admin-Einstellungen (mehrere Mappings)
+ * MailDrop – admin settings (multiple mappings)
  */
 (function () {
-	const initial = OCP.InitialState.loadState('maildrop', 'config')
+	const APP = 'maildrop'
+	const initial = OCP.InitialState.loadState(APP, 'config')
 	let mappings = Array.isArray(initial.mappings) ? initial.mappings.slice() : []
 	let selectedId = mappings[0] ? mappings[0].id : null
 
 	const el = document.getElementById('maildrop-admin')
 	if (!el) {
 		return
+	}
+
+	function tr(text, vars) {
+		return t(APP, text, vars)
 	}
 
 	function selectedMapping() {
@@ -18,7 +23,7 @@
 	function emptyMapping() {
 		return {
 			id: '',
-			name: 'Neues Mapping',
+			name: tr('New mapping'),
 			fetch_enabled: false,
 			imap_host: '',
 			imap_port: 993,
@@ -47,87 +52,89 @@
 
 	function render() {
 		const mapping = selectedMapping() || emptyMapping()
+		const passwordHint = mapping.imap_password_set
+			? tr('(set – leave empty to keep)')
+			: ''
 		el.innerHTML = `
 			<h2>MailDrop</h2>
 			<p class="settings-hint">
-				Mehrere Mapping-Konfigurationen: jedes Mapping verbindet ein IMAP-Postfach
-				(optional gefiltert) mit einem Zielordner in Nextcloud.
+				${escapeHtml(tr('Multiple mapping configurations: each mapping connects an IMAP mailbox (optionally filtered) to a target folder in Nextcloud.'))}
 			</p>
 
 			<div class="maildrop-layout">
 				<aside class="maildrop-sidebar">
 					<div class="maildrop-sidebar__header">
-						<strong>Mappings</strong>
-						<button type="button" id="mf-add" class="primary">Hinzufügen</button>
+						<strong>${escapeHtml(tr('Mappings'))}</strong>
+						<button type="button" id="mf-add" class="primary">${escapeHtml(tr('Add'))}</button>
 					</div>
 					<ul class="maildrop-list" id="mf-list">
 						${mappings.map((m) => `
 							<li class="maildrop-list__item ${m.id === selectedId ? 'is-active' : ''}" data-id="${escapeAttr(m.id)}">
-								<span class="maildrop-list__name">${escapeHtml(m.name || 'Ohne Namen')}</span>
-								<span class="maildrop-list__meta">${m.fetch_enabled ? 'aktiv' : 'pausiert'} · ${escapeHtml(m.target_path || '/')}</span>
+								<span class="maildrop-list__name">${escapeHtml(m.name || tr('Untitled'))}</span>
+								<span class="maildrop-list__meta">${m.fetch_enabled ? escapeHtml(tr('active')) : escapeHtml(tr('paused'))} · ${escapeHtml(m.target_path || '/')}</span>
 							</li>
-						`).join('') || '<li class="maildrop-list__empty">Noch keine Mappings</li>'}
+						`).join('') || `<li class="maildrop-list__empty">${escapeHtml(tr('No mappings yet'))}</li>`}
 					</ul>
 					<p class="maildrop-actions maildrop-actions--stack">
-						<button type="button" id="mf-fetch-all">Alle aktiven abrufen</button>
+						<button type="button" id="mf-fetch-all">${escapeHtml(tr('Fetch all active'))}</button>
 					</p>
 				</aside>
 
 				<section class="maildrop-editor">
 					<form id="maildrop-form" class="maildrop-form">
 						<p>
-							<label for="mf-name">Name</label>
+							<label for="mf-name">${escapeHtml(tr('Name'))}</label>
 							<input type="text" id="mf-name" value="${escapeAttr(mapping.name)}" required>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-enabled" class="checkbox" ${mapping.fetch_enabled ? 'checked' : ''}>
-							<label for="mf-enabled">Abruf für dieses Mapping aktivieren</label>
+							<label for="mf-enabled">${escapeHtml(tr('Enable fetch for this mapping'))}</label>
 						</p>
 
-						<h3>IMAP-Zugang</h3>
+						<h3>${escapeHtml(tr('IMAP access'))}</h3>
 						<p>
-							<label for="mf-host">Host</label>
+							<label for="mf-host">${escapeHtml(tr('Host'))}</label>
 							<input type="text" id="mf-host" value="${escapeAttr(mapping.imap_host)}" placeholder="mail">
 						</p>
 						<p>
-							<label for="mf-port">Port</label>
+							<label for="mf-port">${escapeHtml(tr('Port'))}</label>
 							<input type="number" id="mf-port" value="${escapeAttr(String(mapping.imap_port))}" min="1" max="65535">
 						</p>
 						<p>
-							<label for="mf-enc">Verschlüsselung</label>
+							<label for="mf-enc">${escapeHtml(tr('Encryption'))}</label>
 							<select id="mf-enc">
-								<option value="none" ${mapping.imap_encryption === 'none' ? 'selected' : ''}>Keine</option>
+								<option value="none" ${mapping.imap_encryption === 'none' ? 'selected' : ''}>${escapeHtml(tr('None'))}</option>
 								<option value="tls" ${mapping.imap_encryption === 'tls' ? 'selected' : ''}>STARTTLS</option>
 								<option value="ssl" ${mapping.imap_encryption === 'ssl' ? 'selected' : ''}>SSL/TLS</option>
 							</select>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-validate-cert" class="checkbox" ${mapping.imap_validate_cert !== false ? 'checked' : ''}>
-							<label for="mf-validate-cert">TLS-Zertifikat prüfen (empfohlen)</label>
+							<label for="mf-validate-cert">${escapeHtml(tr('Verify TLS certificate (recommended)'))}</label>
 						</p>
 						<p>
-							<label for="mf-user">IMAP-Benutzer</label>
+							<label for="mf-user">${escapeHtml(tr('IMAP user'))}</label>
 							<input type="text" id="mf-user" value="${escapeAttr(mapping.imap_user)}" autocomplete="off">
 						</p>
 						<p>
-							<label for="mf-pass">Passwort ${mapping.imap_password_set ? '(gesetzt – leer lassen zum Behalten)' : ''}</label>
+							<label for="mf-pass">${escapeHtml(tr('Password'))} ${escapeHtml(passwordHint)}</label>
 							<input type="password" id="mf-pass" value="" autocomplete="new-password" placeholder="${mapping.imap_password_set ? '••••••••' : ''}">
 						</p>
 						<p>
-							<label for="mf-folder">IMAP-Ordner</label>
+							<label for="mf-folder">${escapeHtml(tr('IMAP folder'))}</label>
 							<input type="text" id="mf-folder" value="${escapeAttr(mapping.imap_folder)}" placeholder="INBOX">
 						</p>
 
-						<h3>Ziel in Nextcloud</h3>
+						<h3>${escapeHtml(tr('Target in Nextcloud'))}</h3>
 						<p class="maildrop-user-picker">
-							<label for="mf-target-user-input">Zielbenutzer</label>
+							<label for="mf-target-user-input">${escapeHtml(tr('Target user'))}</label>
 							<input type="hidden" id="mf-target-user" value="${escapeAttr(mapping.target_user)}" required>
 							<input
 								type="text"
 								id="mf-target-user-input"
 								class="maildrop-user-picker__input"
 								value="${escapeAttr(mapping.target_user)}"
-								placeholder="Name oder User-ID eingeben…"
+								placeholder="${escapeAttr(tr('Enter name or user ID…'))}"
 								autocomplete="off"
 								spellcheck="false"
 								role="combobox"
@@ -139,60 +146,60 @@
 							<em class="maildrop-hint" id="mf-target-user-hint"></em>
 						</p>
 						<p>
-							<label for="mf-target-path">Zielordner</label>
+							<label for="mf-target-path">${escapeHtml(tr('Target folder'))}</label>
 							<span class="maildrop-path-row">
 								<input type="text" id="mf-target-path" value="${escapeAttr(mapping.target_path)}" placeholder="/Mail-Anhänge">
-								<button type="button" id="mf-pick-path" title="Ordner über Nextcloud-Dateiauswahl wählen">Ordner wählen…</button>
+								<button type="button" id="mf-pick-path" title="${escapeAttr(tr('Choose folder via Nextcloud file picker'))}">${escapeHtml(tr('Choose folder…'))}</button>
 							</span>
-							<em class="maildrop-hint">Standard: Anhänge flach hier ablegen (Präfix Datum_uid…). Optional Unterordner pro Mail / .eml speichern (siehe unten). Der Dialog zeigt die Dateien des angemeldeten Admins.</em>
+							<em class="maildrop-hint">${escapeHtml(tr('Default: store attachments flat here (prefix date_uid…). Optional per-mail subfolder / save .eml (see below). The dialog shows files of the logged-in admin.'))}</em>
 						</p>
 
-						<h3>Filter &amp; Verhalten</h3>
+						<h3>${escapeHtml(tr('Filters & behaviour'))}</h3>
 						<p>
-							<label for="mf-subject">Betreff enthält (optional)</label>
+							<label for="mf-subject">${escapeHtml(tr('Subject contains (optional)'))}</label>
 							<input type="text" id="mf-subject" value="${escapeAttr(mapping.subject_filter || '')}">
 						</p>
 						<p>
-							<label for="mf-sender">Absender enthält (optional)</label>
+							<label for="mf-sender">${escapeHtml(tr('Sender contains (optional)'))}</label>
 							<input type="text" id="mf-sender" value="${escapeAttr(mapping.sender_filter || '')}">
 						</p>
 						<p>
-							<label for="mf-max-bytes">Max. Anhanggröße in Bytes (0 = unbegrenzt)</label>
+							<label for="mf-max-bytes">${escapeHtml(tr('Max. attachment size in bytes (0 = unlimited)'))}</label>
 							<input type="number" id="mf-max-bytes" value="${escapeAttr(String(mapping.max_attachment_bytes ?? 26214400))}" min="0" step="1">
 						</p>
 						<p>
 							<input type="checkbox" id="mf-mail-folder" class="checkbox" ${mapping.create_mail_folder ? 'checked' : ''}>
-							<label for="mf-mail-folder">Pro E-Mail einen Unterordner anlegen</label>
+							<label for="mf-mail-folder">${escapeHtml(tr('Create a subfolder per email'))}</label>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-save-mail" class="checkbox" ${mapping.save_mail_file ? 'checked' : ''}>
-							<label for="mf-save-mail">E-Mail-Datei (.eml) neben die Anhänge speichern</label>
+							<label for="mf-save-mail">${escapeHtml(tr('Save email file (.eml) next to attachments'))}</label>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-seen" class="checkbox" ${mapping.mark_as_seen ? 'checked' : ''}>
-							<label for="mf-seen">Nachrichten nach Import als gelesen markieren</label>
+							<label for="mf-seen">${escapeHtml(tr('Mark messages as read after import'))}</label>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-delete" class="checkbox" ${mapping.delete_after_import ? 'checked' : ''}>
-							<label for="mf-delete">Nachrichten nach Import löschen</label>
+							<label for="mf-delete">${escapeHtml(tr('Delete messages after import'))}</label>
 						</p>
 
 						<p class="maildrop-actions">
-							<button type="submit" class="primary">Mapping speichern</button>
-							<button type="button" id="mf-test">Verbindung testen</button>
-							<button type="button" id="mf-fetch">Dieses Mapping abrufen</button>
-							<button type="button" id="mf-reset-cursor">Cursor zurücksetzen</button>
-							<button type="button" id="mf-delete-mapping" ${mappings.length <= 1 ? 'disabled' : ''}>Löschen</button>
+							<button type="submit" class="primary">${escapeHtml(tr('Save mapping'))}</button>
+							<button type="button" id="mf-test">${escapeHtml(tr('Test connection'))}</button>
+							<button type="button" id="mf-fetch">${escapeHtml(tr('Fetch this mapping'))}</button>
+							<button type="button" id="mf-reset-cursor">${escapeHtml(tr('Reset cursor'))}</button>
+							<button type="button" id="mf-delete-mapping" ${mappings.length <= 1 ? 'disabled' : ''}>${escapeHtml(tr('Delete'))}</button>
 						</p>
 					</form>
 
 					<div id="maildrop-status" class="maildrop-status" aria-live="polite"></div>
 
 					<div class="maildrop-meta">
-						<p><strong>Letzter Lauf:</strong> <span id="mf-last-run">${escapeHtml(mapping.last_run || '–')}</span></p>
-						<p><strong>Status:</strong> <span id="mf-last-status">${escapeHtml(mapping.last_status || '–')}</span></p>
-						<p><strong>Meldung:</strong> <span id="mf-last-error">${escapeHtml(mapping.last_error || '–')}</span></p>
-						<p><strong>Cursor:</strong> UID ${escapeHtml(String(mapping.last_uid ?? 0))} · UIDVALIDITY ${escapeHtml(String(mapping.uidvalidity ?? 0))}</p>
+						<p><strong>${escapeHtml(tr('Last run:'))}</strong> <span id="mf-last-run">${escapeHtml(mapping.last_run || '–')}</span></p>
+						<p><strong>${escapeHtml(tr('Status:'))}</strong> <span id="mf-last-status">${escapeHtml(mapping.last_status || '–')}</span></p>
+						<p><strong>${escapeHtml(tr('Message:'))}</strong> <span id="mf-last-error">${escapeHtml(mapping.last_error || '–')}</span></p>
+						<p><strong>${escapeHtml(tr('Cursor:'))}</strong> UID ${escapeHtml(String(mapping.last_uid ?? 0))} · UIDVALIDITY ${escapeHtml(String(mapping.uidvalidity ?? 0))}</p>
 					</div>
 				</section>
 			</div>
@@ -212,15 +219,15 @@
 		})
 
 		document.getElementById('mf-add').addEventListener('click', async () => {
-			setStatus('Lege Mapping an…', 'info')
+			setStatus(tr('Creating mapping…'), 'info')
 			try {
 				const created = await api('POST', '/apps/maildrop/api/mappings', emptyMapping())
 				mappings.push(created)
 				selectedId = created.id
 				render()
-				setStatus('Neues Mapping angelegt – bitte speichern/konfigurieren.', 'ok')
+				setStatus(tr('New mapping created – please configure and save.'), 'ok')
 			} catch (error) {
-				setStatus(error.message || 'Anlegen fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Could not create mapping.'), 'error')
 			}
 		})
 
@@ -235,14 +242,14 @@
 			if (!selectedId) {
 				return
 			}
-			setStatus('Speichere Mapping…', 'info')
+			setStatus(tr('Saving mapping…'), 'info')
 			try {
 				const saved = await api('PUT', '/apps/maildrop/api/mappings/' + encodeURIComponent(selectedId), collectPayload())
 				mappings = mappings.map((m) => (m.id === saved.id ? saved : m))
 				render()
-				setStatus('Mapping gespeichert.', 'ok')
+				setStatus(tr('Mapping saved.'), 'ok')
 			} catch (error) {
-				setStatus(error.message || 'Speichern fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Could not save.'), 'error')
 			}
 		})
 
@@ -250,13 +257,13 @@
 			if (!selectedId) {
 				return
 			}
-			setStatus('Teste Verbindung…', 'info')
+			setStatus(tr('Testing connection…'), 'info')
 			try {
 				await api('PUT', '/apps/maildrop/api/mappings/' + encodeURIComponent(selectedId), collectPayload())
 				const result = await api('POST', '/apps/maildrop/api/test', { id: selectedId })
 				setStatus(result.message, result.success ? 'ok' : 'error')
 			} catch (error) {
-				setStatus(error.message || 'Test fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Test failed.'), 'error')
 			}
 		})
 
@@ -264,25 +271,25 @@
 			if (!selectedId) {
 				return
 			}
-			setStatus('Rufe Mapping ab…', 'info')
+			setStatus(tr('Fetching mapping…'), 'info')
 			try {
 				await api('PUT', '/apps/maildrop/api/mappings/' + encodeURIComponent(selectedId), collectPayload())
 				const result = await api('POST', '/apps/maildrop/api/fetch', { id: selectedId })
 				await reload()
 				setStatus(result.message, result.success ? 'ok' : 'error')
 			} catch (error) {
-				setStatus(error.message || 'Abruf fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Fetch failed.'), 'error')
 			}
 		})
 
 		document.getElementById('mf-fetch-all').addEventListener('click', async () => {
-			setStatus('Rufe alle aktiven Mappings ab…', 'info')
+			setStatus(tr('Fetching all active mappings…'), 'info')
 			try {
 				const result = await api('POST', '/apps/maildrop/api/fetch', {})
 				await reload()
 				setStatus(result.message, result.success ? 'ok' : 'error')
 			} catch (error) {
-				setStatus(error.message || 'Abruf fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Fetch failed.'), 'error')
 			}
 		})
 
@@ -290,10 +297,10 @@
 			if (!selectedId) {
 				return
 			}
-			if (!window.confirm('IMAP-Cursor (last_uid / UIDVALIDITY) zurücksetzen? Bereits importierte Mails können erneut geprüft werden.')) {
+			if (!window.confirm(tr('Reset IMAP cursor (last_uid / UIDVALIDITY)? Already imported mails may be checked again.'))) {
 				return
 			}
-			setStatus('Setze Cursor zurück…', 'info')
+			setStatus(tr('Resetting cursor…'), 'info')
 			try {
 				const saved = await api(
 					'POST',
@@ -302,9 +309,9 @@
 				)
 				mappings = mappings.map((m) => (m.id === saved.id ? saved : m))
 				render()
-				setStatus('Cursor zurückgesetzt.', 'ok')
+				setStatus(tr('Cursor reset.'), 'ok')
 			} catch (error) {
-				setStatus(error.message || 'Zurücksetzen fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Could not reset cursor.'), 'error')
 			}
 		})
 
@@ -312,18 +319,18 @@
 			if (!selectedId || mappings.length <= 1) {
 				return
 			}
-			if (!window.confirm('Dieses Mapping wirklich löschen?')) {
+			if (!window.confirm(tr('Really delete this mapping?'))) {
 				return
 			}
-			setStatus('Lösche Mapping…', 'info')
+			setStatus(tr('Deleting mapping…'), 'info')
 			try {
 				const result = await api('DELETE', '/apps/maildrop/api/mappings/' + encodeURIComponent(selectedId))
 				mappings = result.mappings || []
 				selectedId = mappings[0] ? mappings[0].id : null
 				render()
-				setStatus('Mapping gelöscht.', 'ok')
+				setStatus(tr('Mapping deleted.'), 'ok')
 			} catch (error) {
-				setStatus(error.message || 'Löschen fehlgeschlagen.', 'error')
+				setStatus(error.message || tr('Could not delete.'), 'error')
 			}
 		})
 
@@ -366,7 +373,7 @@
 		let activeIndex = -1
 		let open = false
 
-		// Menü an body hängen – sonst schneidet das Settings-Layout die Liste ab
+		// Attach menu to body – otherwise the settings layout clips the list
 		if (menu.parentElement !== document.body) {
 			document.body.appendChild(menu)
 		}
@@ -412,7 +419,7 @@
 		const renderMenu = (users) => {
 			visibleUsers = users
 			if (!users.length) {
-				menu.innerHTML = '<li class="maildrop-user-picker__empty">Keine Treffer</li>'
+				menu.innerHTML = '<li class="maildrop-user-picker__empty">' + escapeHtml(tr('No matches')) + '</li>'
 				setOpen(true)
 				return
 			}
@@ -442,7 +449,7 @@
 			activeIndex = filtered.length ? 0 : -1
 			renderMenu(filtered)
 			hint.textContent = allUsers.length
-				? (filtered.length + ' von ' + allUsers.length)
+				? tr('{filtered} of {total}', { filtered: String(filtered.length), total: String(allUsers.length) })
 				: ''
 		}
 
@@ -460,8 +467,8 @@
 		input.addEventListener('focus', () => {
 			input.value = ''
 			if (!allUsers.length) {
-				hint.textContent = 'Lade Benutzer…'
-				menu.innerHTML = '<li class="maildrop-user-picker__empty">Lade Benutzer…</li>'
+				hint.textContent = tr('Loading users…')
+				menu.innerHTML = '<li class="maildrop-user-picker__empty">' + escapeHtml(tr('Loading users…')) + '</li>'
 				setOpen(true)
 				return
 			}
@@ -519,7 +526,7 @@
 				setOpen(false)
 				const typed = input.value.trim()
 				if (!typed) {
-					// Abbruch der Suche: bisherigen Zielbenutzer behalten
+					// Cancel search: keep previous target user
 					syncLabelFromHidden()
 					hint.textContent = ''
 					return
@@ -545,33 +552,33 @@
 					selectUser(partial[0])
 					return
 				}
-				// Freitext-ID erlauben
+				// Allow free-text ID
 				hidden.value = typed
 				hint.textContent = allUsers.some((u) => u.id === typed)
 					? ''
-					: 'Unbekannte User-ID – speichern möglich, Abruf prüft Existenz.'
+					: tr('Unknown user ID – saving is possible, fetch will verify existence.')
 			}, 120)
 		})
 
-		hint.textContent = 'Lade Benutzer…'
+		hint.textContent = tr('Loading users…')
 		api('GET', '/apps/maildrop/api/users?search=&limit=200')
 			.then((data) => {
 				allUsers = Array.isArray(data.users) ? data.users : []
 				syncLabelFromHidden()
-				hint.textContent = allUsers.length ? '' : 'Keine Benutzer gefunden'
+				hint.textContent = allUsers.length ? '' : tr('No users found')
 			})
 			.catch((error) => {
-				hint.textContent = 'Benutzerliste nicht ladbar: ' + (error.message || 'Fehler')
+				hint.textContent = tr('Could not load user list: {error}', { error: error.message || tr('Error') })
 			})
 	}
 
 	/**
-	 * Nativer Nextcloud-Ordnerdialog (OC.dialogs.filepicker → @nextcloud/dialogs).
-	 * Zeigt die Dateien des angemeldeten Users – nicht zwingend von target_user.
+	 * Native Nextcloud folder dialog (OC.dialogs.filepicker → @nextcloud/dialogs).
+	 * Shows files of the logged-in user – not necessarily target_user.
 	 */
 	function pickTargetFolder(setStatus) {
 		if (typeof OC.dialogs === 'undefined' || typeof OC.dialogs.filepicker !== 'function') {
-			setStatus('Ordner-Auswahl ist in dieser Nextcloud-Version nicht verfügbar. Bitte Pfad manuell eintragen.', 'error')
+			setStatus(tr('Folder picker is not available in this Nextcloud version. Please enter the path manually.'), 'error')
 			return
 		}
 
@@ -580,8 +587,10 @@
 		const me = currentUserId()
 		if (targetUser && me && targetUser !== me) {
 			setStatus(
-				'Hinweis: Der Dialog zeigt die Dateien von „' + me + '“, Zielbenutzer ist „' + targetUser + '“. '
-				+ 'Pfad ggf. manuell setzen oder Zielbenutzer auf den angemeldeten Admin stellen.',
+				tr('Note: The dialog shows files of "{me}", target user is "{target}". Set the path manually if needed, or set the target user to the logged-in admin.', {
+					me,
+					target: targetUser,
+				}),
 				'info',
 			)
 		}
@@ -593,7 +602,7 @@
 
 		const type = OC.dialogs.FILEPICKER_TYPE_CHOOSE || 1
 		OC.dialogs.filepicker(
-			'Zielordner wählen',
+			tr('Choose target folder'),
 			(path) => {
 				let chosen = path || '/'
 				if (!chosen.startsWith('/')) {
@@ -613,7 +622,7 @@
 	function collectPayload() {
 		return {
 			id: selectedId,
-			name: document.getElementById('mf-name').value.trim() || 'Mapping',
+			name: document.getElementById('mf-name').value.trim() || tr('Mapping'),
 			fetch_enabled: document.getElementById('mf-enabled').checked,
 			imap_host: document.getElementById('mf-host').value.trim(),
 			imap_port: Number(document.getElementById('mf-port').value),
