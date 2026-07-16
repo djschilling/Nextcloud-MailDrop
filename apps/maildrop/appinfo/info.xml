@@ -13,7 +13,7 @@ Konfigurierbar über die Admin-Einstellungen:
 - Zielordner in Nextcloud
 - Intervall und Filter
 	]]></description>
-	<version>1.1.1</version>
+	<version>1.2.0</version>
 	<licence>agpl</licence>
 	<author mail="dev@localhost">MailDrop</author>
 	<namespace>MailDrop</namespace>

@@ -141,30 +141,29 @@ def configure_maildrop() -> None:
 	# Zuerst Upgrade, sonst sind viele occ-Befehle gesperrt.
 	occ("upgrade", check=False)
 	occ("app:enable", "maildrop", check=False)
-
 	occ("config:app:set", "maildrop", "enabled", "--value=yes")
-	occ("config:app:set", "maildrop", "fetch_enabled", "--value=1")
-	occ("config:app:set", "maildrop", "imap_host", "--value=mail")
-	occ("config:app:set", "maildrop", "imap_port", "--value=3143")
-	occ("config:app:set", "maildrop", "imap_encryption", "--value=none")
-	occ("config:app:set", "maildrop", "imap_user", "--value=" + IMAP_USER)
-	occ("config:app:set", "maildrop", "imap_folder", "--value=INBOX")
-	occ("config:app:set", "maildrop", "target_user", "--value=" + NEXTCLOUD_USER)
-	occ("config:app:set", "maildrop", "target_path", "--value=" + TARGET_PATH)
-	occ("config:app:set", "maildrop", "mark_as_seen", "--value=1")
-	occ("config:app:set", "maildrop", "delete_after_import", "--value=0")
-	occ("config:app:set", "maildrop", "subject_filter", "--value=")
-	occ("config:app:set", "maildrop", "sender_filter", "--value=")
 
 	php = f"""<?php
 require '/var/www/html/lib/base.php';
-$crypto = \\OC::$server->get(\\OCP\\Security\\ICrypto::class);
-\\OC::$server->get(\\OCP\\IConfig::class)->setAppValue(
-  'maildrop',
-  'imap_password',
-  $crypto->encrypt({json.dumps(IMAP_PASSWORD)})
-);
-echo "imap password encrypted\\n";
+$config = \\OC::$server->get(\\OCA\\MailDrop\\Service\\ConfigService::class);
+$mappings = $config->saveMappings([[
+  'id' => 'e2e-default',
+  'name' => 'E2E Mapping',
+  'fetch_enabled' => true,
+  'imap_host' => 'mail',
+  'imap_port' => 3143,
+  'imap_encryption' => 'none',
+  'imap_user' => {json.dumps(IMAP_USER)},
+  'imap_password' => {json.dumps(IMAP_PASSWORD)},
+  'imap_folder' => 'INBOX',
+  'target_user' => {json.dumps(NEXTCLOUD_USER)},
+  'target_path' => {json.dumps(TARGET_PATH)},
+  'mark_as_seen' => true,
+  'delete_after_import' => false,
+  'subject_filter' => '',
+  'sender_filter' => '',
+]]);
+echo 'mappings=' . count($mappings) . PHP_EOL;
 """
 	run(
 		[
