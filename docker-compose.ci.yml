@@ -1,0 +1,6 @@
+# CI-Override: kein Bind-Mount von ./apps während der Erstinstallation.
+# Die App wird nach erfolgreichem Install per `docker compose cp` eingespielt.
+services:
+  nextcloud:
+    volumes:
+      - nextcloud_data:/var/www/html
