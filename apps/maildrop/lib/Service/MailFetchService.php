@@ -182,13 +182,13 @@ class MailFetchService {
 				$lastUid = 0;
 			}
 
-			$uidFrom = $lastUid + 1;
+			// IONOS u. a. lehnen UID-Suche mit "N:*" ab (BAD expected DIGIT).
+			// getByUidGreater() nutzt eine serverkompatible Abfrage.
 			try {
 				$messages = $mailbox->messages()
-					->whereUid($uidFrom . ':*')
-					->setFetchOrder('asc')
 					->leaveUnread()
-					->get();
+					->setFetchOrder('asc')
+					->getByUidGreater($lastUid);
 			} catch (\Throwable $e) {
 				// Leere Mailbox / keine Treffer je nach Server
 				$this->logger->debug(
