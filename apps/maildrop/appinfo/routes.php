@@ -44,5 +44,10 @@ return [
 			'url' => '/api/fetch',
 			'verb' => 'POST',
 		],
+		[
+			'name' => 'config#resetCursor',
+			'url' => '/api/mappings/{id}/reset-cursor',
+			'verb' => 'POST',
+		],
 	],
 ];

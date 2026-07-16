@@ -20,10 +20,11 @@
 			id: '',
 			name: 'Neues Mapping',
 			fetch_enabled: false,
-			imap_host: 'mail',
-			imap_port: 3143,
-			imap_encryption: 'none',
-			imap_user: 'maildrop',
+			imap_host: '',
+			imap_port: 993,
+			imap_encryption: 'ssl',
+			imap_validate_cert: true,
+			imap_user: '',
 			imap_password: '',
 			imap_password_set: false,
 			imap_folder: 'INBOX',
@@ -33,6 +34,11 @@
 			delete_after_import: false,
 			subject_filter: '',
 			sender_filter: '',
+			max_attachment_bytes: 26214400,
+			create_mail_folder: false,
+			save_mail_file: false,
+			last_uid: 0,
+			uidvalidity: 0,
 			last_run: '',
 			last_status: '',
 			last_error: '',
@@ -96,6 +102,10 @@
 							</select>
 						</p>
 						<p>
+							<input type="checkbox" id="mf-validate-cert" class="checkbox" ${mapping.imap_validate_cert !== false ? 'checked' : ''}>
+							<label for="mf-validate-cert">TLS-Zertifikat prüfen (empfohlen)</label>
+						</p>
+						<p>
 							<label for="mf-user">IMAP-Benutzer</label>
 							<input type="text" id="mf-user" value="${escapeAttr(mapping.imap_user)}" autocomplete="off">
 						</p>
@@ -134,7 +144,7 @@
 								<input type="text" id="mf-target-path" value="${escapeAttr(mapping.target_path)}" placeholder="/Mail-Anhänge">
 								<button type="button" id="mf-pick-path" title="Ordner über Nextcloud-Dateiauswahl wählen">Ordner wählen…</button>
 							</span>
-							<em class="maildrop-hint">Der Dialog zeigt die Dateien des angemeldeten Admins. Existiert der Ordner noch nicht, kann der Pfad auch manuell eingetragen werden (wird beim Abruf angelegt).</em>
+							<em class="maildrop-hint">Standard: Anhänge flach hier ablegen (Präfix Datum_uid…). Optional Unterordner pro Mail / .eml speichern (siehe unten). Der Dialog zeigt die Dateien des angemeldeten Admins.</em>
 						</p>
 
 						<h3>Filter &amp; Verhalten</h3>
@@ -145,6 +155,18 @@
 						<p>
 							<label for="mf-sender">Absender enthält (optional)</label>
 							<input type="text" id="mf-sender" value="${escapeAttr(mapping.sender_filter || '')}">
+						</p>
+						<p>
+							<label for="mf-max-bytes">Max. Anhanggröße in Bytes (0 = unbegrenzt)</label>
+							<input type="number" id="mf-max-bytes" value="${escapeAttr(String(mapping.max_attachment_bytes ?? 26214400))}" min="0" step="1">
+						</p>
+						<p>
+							<input type="checkbox" id="mf-mail-folder" class="checkbox" ${mapping.create_mail_folder ? 'checked' : ''}>
+							<label for="mf-mail-folder">Pro E-Mail einen Unterordner anlegen</label>
+						</p>
+						<p>
+							<input type="checkbox" id="mf-save-mail" class="checkbox" ${mapping.save_mail_file ? 'checked' : ''}>
+							<label for="mf-save-mail">E-Mail-Datei (.eml) neben die Anhänge speichern</label>
 						</p>
 						<p>
 							<input type="checkbox" id="mf-seen" class="checkbox" ${mapping.mark_as_seen ? 'checked' : ''}>
@@ -159,6 +181,7 @@
 							<button type="submit" class="primary">Mapping speichern</button>
 							<button type="button" id="mf-test">Verbindung testen</button>
 							<button type="button" id="mf-fetch">Dieses Mapping abrufen</button>
+							<button type="button" id="mf-reset-cursor">Cursor zurücksetzen</button>
 							<button type="button" id="mf-delete-mapping" ${mappings.length <= 1 ? 'disabled' : ''}>Löschen</button>
 						</p>
 					</form>
@@ -169,6 +192,7 @@
 						<p><strong>Letzter Lauf:</strong> <span id="mf-last-run">${escapeHtml(mapping.last_run || '–')}</span></p>
 						<p><strong>Status:</strong> <span id="mf-last-status">${escapeHtml(mapping.last_status || '–')}</span></p>
 						<p><strong>Meldung:</strong> <span id="mf-last-error">${escapeHtml(mapping.last_error || '–')}</span></p>
+						<p><strong>Cursor:</strong> UID ${escapeHtml(String(mapping.last_uid ?? 0))} · UIDVALIDITY ${escapeHtml(String(mapping.uidvalidity ?? 0))}</p>
 					</div>
 				</section>
 			</div>
@@ -259,6 +283,28 @@
 				setStatus(result.message, result.success ? 'ok' : 'error')
 			} catch (error) {
 				setStatus(error.message || 'Abruf fehlgeschlagen.', 'error')
+			}
+		})
+
+		document.getElementById('mf-reset-cursor').addEventListener('click', async () => {
+			if (!selectedId) {
+				return
+			}
+			if (!window.confirm('IMAP-Cursor (last_uid / UIDVALIDITY) zurücksetzen? Bereits importierte Mails können erneut geprüft werden.')) {
+				return
+			}
+			setStatus('Setze Cursor zurück…', 'info')
+			try {
+				const saved = await api(
+					'POST',
+					'/apps/maildrop/api/mappings/' + encodeURIComponent(selectedId) + '/reset-cursor',
+					{},
+				)
+				mappings = mappings.map((m) => (m.id === saved.id ? saved : m))
+				render()
+				setStatus('Cursor zurückgesetzt.', 'ok')
+			} catch (error) {
+				setStatus(error.message || 'Zurücksetzen fehlgeschlagen.', 'error')
 			}
 		})
 
@@ -572,6 +618,7 @@
 			imap_host: document.getElementById('mf-host').value.trim(),
 			imap_port: Number(document.getElementById('mf-port').value),
 			imap_encryption: document.getElementById('mf-enc').value,
+			imap_validate_cert: document.getElementById('mf-validate-cert').checked,
 			imap_user: document.getElementById('mf-user').value.trim(),
 			imap_password: document.getElementById('mf-pass').value,
 			imap_folder: document.getElementById('mf-folder').value.trim() || 'INBOX',
@@ -581,6 +628,9 @@
 			delete_after_import: document.getElementById('mf-delete').checked,
 			subject_filter: document.getElementById('mf-subject').value.trim(),
 			sender_filter: document.getElementById('mf-sender').value.trim(),
+			max_attachment_bytes: Number(document.getElementById('mf-max-bytes').value),
+			create_mail_folder: document.getElementById('mf-mail-folder').checked,
+			save_mail_file: document.getElementById('mf-save-mail').checked,
 		}
 	}
 

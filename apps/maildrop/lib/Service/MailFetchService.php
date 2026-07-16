@@ -8,6 +8,8 @@ use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
 use OCP\IUserManager;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 use Webklex\PHPIMAP\Client;
 use Webklex\PHPIMAP\ClientManager;
@@ -19,6 +21,7 @@ class MailFetchService {
 		private ConfigService $configService,
 		private IRootFolder $rootFolder,
 		private IUserManager $userManager,
+		private ILockingProvider $lockingProvider,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -39,7 +42,8 @@ class MailFetchService {
 			$folder = $client->getFolder((string)$mapping['imap_folder']);
 			$count = 0;
 			if ($folder !== null) {
-				$count = $folder->messages()->all()->leaveUnread()->get()->count();
+				$status = $folder->examine();
+				$count = (int)($status['exists'] ?? $status['MESSAGES'] ?? 0);
 			}
 			return [
 				'success' => true,
@@ -55,13 +59,7 @@ class MailFetchService {
 				'message' => sprintf('[%s] %s', $mapping['name'], $this->friendlyError($e)),
 			];
 		} finally {
-			if ($client !== null) {
-				try {
-					$client->disconnect();
-				} catch (\Throwable) {
-					// ignore
-				}
-			}
+			$this->disconnect($client);
 		}
 	}
 
@@ -138,11 +136,26 @@ class MailFetchService {
 			return ['success' => false, 'message' => $message, 'imported' => 0, 'skipped' => 0];
 		}
 
+		$lockKey = 'maildrop/fetch/' . $mapping['id'];
+		try {
+			$this->lockingProvider->acquireLock($lockKey, ILockingProvider::LOCK_EXCLUSIVE);
+		} catch (LockedException) {
+			$message = 'Abruf läuft bereits für dieses Mapping.';
+			return ['success' => false, 'message' => $message, 'imported' => 0, 'skipped' => 0];
+		}
+
 		$imported = 0;
 		$skipped = 0;
 		$client = null;
 
 		try {
+			// Frischen Stand laden (nach Lock)
+			$fresh = $this->configService->getMapping((string)$mapping['id']);
+			if ($fresh === null) {
+				throw new \RuntimeException('Mapping nicht gefunden.');
+			}
+			$mapping = $fresh;
+
 			$targetFolder = $this->ensureTargetFolder(
 				(string)$mapping['target_user'],
 				(string)$mapping['target_path'],
@@ -155,9 +168,38 @@ class MailFetchService {
 				throw new \RuntimeException(sprintf('IMAP-Ordner "%s" nicht gefunden.', $mapping['imap_folder']));
 			}
 
+			$status = $mailbox->select();
+			$uidValidity = (int)($status['uidvalidity'] ?? $status['UIDVALIDITY'] ?? 0);
+			$storedValidity = (int)$mapping['uidvalidity'];
 			$lastUid = (int)$mapping['last_uid'];
-			$messages = $mailbox->messages()->all()->setFetchOrder('asc')->leaveUnread()->get();
+
+			if ($uidValidity > 0 && $storedValidity > 0 && $uidValidity !== $storedValidity) {
+				$this->logger->warning(
+					'MailDrop [' . $mapping['name'] . ']: UIDVALIDITY geändert ('
+					. $storedValidity . ' → ' . $uidValidity . ') – Cursor wird zurückgesetzt.',
+					['app' => 'maildrop'],
+				);
+				$lastUid = 0;
+			}
+
+			$uidFrom = $lastUid + 1;
+			try {
+				$messages = $mailbox->messages()
+					->whereUid($uidFrom . ':*')
+					->setFetchOrder('asc')
+					->leaveUnread()
+					->get();
+			} catch (\Throwable $e) {
+				// Leere Mailbox / keine Treffer je nach Server
+				$this->logger->debug(
+					'MailDrop UID-Suche ohne Treffer: ' . $e->getMessage(),
+					['app' => 'maildrop'],
+				);
+				$messages = [];
+			}
+
 			$maxUid = $lastUid;
+			$maxBytes = (int)$mapping['max_attachment_bytes'];
 
 			/** @var Message $message */
 			foreach ($messages as $message) {
@@ -165,72 +207,120 @@ class MailFetchService {
 				if ($uid <= $lastUid) {
 					continue;
 				}
-				$maxUid = max($maxUid, $uid);
 
 				$subject = (string)$message->getSubject();
 				$from = $this->formatFrom($message);
 
 				if (!$this->matchesFilters($subject, $from, $mapping)) {
 					$skipped++;
-					continue;
-				}
+				} else {
+					$attachments = $message->getAttachments();
+					$saveMailFile = !empty($mapping['save_mail_file']);
+					$createMailFolder = !empty($mapping['create_mail_folder']);
 
-				$attachments = $message->getAttachments();
-				if ($attachments->count() === 0) {
-					$skipped++;
-					if (!empty($mapping['mark_as_seen'])) {
-						$message->setFlag('Seen');
+					if ($attachments->count() === 0 && !$saveMailFile) {
+						$skipped++;
+						if (!empty($mapping['mark_as_seen'])) {
+							$message->setFlag('Seen');
+						}
+					} else {
+						$dateAttr = $message->getDate();
+						$messageDate = $dateAttr !== null ? $dateAttr->toDate() : null;
+						$msgDate = $messageDate instanceof \DateTimeInterface ? $messageDate : null;
+						$destFolder = $targetFolder;
+
+						if ($createMailFolder) {
+							$safeSubject = AttachmentNamer::sanitizeFilename(
+								$subject !== '' ? $subject : 'ohne-betreff',
+							);
+							$dateStr = $msgDate ? $msgDate->format('Y-m-d_His') : date('Y-m-d_His');
+							$mailFolderName = sprintf('%s_%s_uid%d', $dateStr, $safeSubject, $uid);
+							$destFolder = $this->getOrCreateSubFolder($targetFolder, $mailFolderName);
+						}
+
+						$savedNames = [];
+						foreach ($attachments as $attachment) {
+							$content = $attachment->getContent();
+							$size = is_string($content) ? strlen($content) : 0;
+							if ($maxBytes > 0 && $size > $maxBytes) {
+								$skipped++;
+								$this->logger->warning(
+									sprintf(
+										'MailDrop [%s]: Anhang übersprungen (zu groß: %d > %d Bytes, UID %d)',
+										$mapping['name'],
+										$size,
+										$maxBytes,
+										$uid,
+									),
+									['app' => 'maildrop'],
+								);
+								continue;
+							}
+
+							$name = (string)$attachment->getName();
+							if ($createMailFolder) {
+								$filename = AttachmentNamer::sanitizeFilename($name !== '' ? $name : 'anhang');
+							} else {
+								$filename = AttachmentNamer::buildPrefixedName($name, $uid, $msgDate);
+							}
+							$filename = $this->uniqueFilename($destFolder, $filename);
+							$destFolder->newFile($filename, $content);
+							$savedNames[] = $filename;
+							$imported++;
+						}
+
+						if ($saveMailFile) {
+							$mailFilename = $this->storeMailSidecar(
+								$destFolder,
+								$message,
+								[
+									'mapping_id' => $mapping['id'],
+									'mapping_name' => $mapping['name'],
+									'uid' => $uid,
+									'subject' => $subject,
+									'from' => $from,
+									'date' => $msgDate ? $msgDate->format(\DateTimeInterface::ATOM) : '',
+									'attachments' => $savedNames,
+								],
+								$uid,
+								$msgDate,
+								!$createMailFolder,
+							);
+							if ($mailFilename !== null) {
+								$imported++;
+							}
+						}
+
+						if ($savedNames !== [] || $saveMailFile) {
+							if (!empty($mapping['mark_as_seen'])) {
+								$message->setFlag('Seen');
+							}
+							if (!empty($mapping['delete_after_import'])) {
+								$message->delete();
+							}
+						} elseif (!empty($mapping['mark_as_seen'])) {
+							$message->setFlag('Seen');
+						}
 					}
-					continue;
 				}
 
-				$safeSubject = $this->sanitizeFilename($subject !== '' ? $subject : 'ohne-betreff');
-				$dateAttr = $message->getDate();
-				$date = $dateAttr !== null ? $dateAttr->toDate() : null;
-				$dateStr = $date ? $date->format('Y-m-d_His') : date('Y-m-d_His');
-				$mailFolderName = sprintf('%s_%s_uid%d', $dateStr, $safeSubject, $uid);
-				$mailFolder = $this->getOrCreateSubFolder($targetFolder, $mailFolderName);
-
-				$savedNames = [];
-				foreach ($attachments as $attachment) {
-					$name = (string)$attachment->getName();
-					$filename = $this->sanitizeFilename($name !== '' ? $name : 'anhang');
-					$filename = $this->uniqueFilename($mailFolder, $filename);
-					$mailFolder->newFile($filename, $attachment->getContent());
-					$savedNames[] = $filename;
-					$imported++;
-				}
-
-				$meta = [
-					'mapping_id' => $mapping['id'],
-					'mapping_name' => $mapping['name'],
-					'uid' => $uid,
-					'subject' => $subject,
-					'from' => $from,
-					'date' => $date ? $date->toIso8601String() : '',
-					'attachments' => $savedNames,
-				];
-				$mailFolder->newFile('email.json', json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-				if (!empty($mapping['mark_as_seen'])) {
-					$message->setFlag('Seen');
-				}
-				if (!empty($mapping['delete_after_import'])) {
-					$message->delete();
-				}
+				// Cursor nach jeder Mail fortschreiben (weniger Duplikate bei Abbruch)
+				$maxUid = max($maxUid, $uid);
+				$this->configService->updateMappingRuntimeState((string)$mapping['id'], [
+					'last_uid' => $maxUid,
+					'uidvalidity' => $uidValidity,
+				]);
 			}
 
-			$updates = [
+			$messageText = sprintf('%d Anhang/Anhänge importiert, %d übersprungen.', $imported, $skipped);
+			$this->configService->updateMappingRuntimeState((string)$mapping['id'], [
+				'last_uid' => $maxUid,
+				'uidvalidity' => $uidValidity,
 				'last_run' => (new \DateTimeImmutable('now'))->format(\DateTimeInterface::ATOM),
 				'last_status' => 'ok',
-				'last_error' => sprintf('%d Anhang/Anhänge importiert, %d übersprungen.', $imported, $skipped),
-			];
-			if ($maxUid > $lastUid) {
-				$updates['last_uid'] = $maxUid;
-			}
-			$this->configService->updateMappingRuntimeState((string)$mapping['id'], $updates);
+				'last_error' => $messageText,
+			]);
 
-			$messageText = $updates['last_error'];
 			$this->logger->info('MailDrop [' . $mapping['name'] . ']: ' . $messageText, ['app' => 'maildrop']);
 
 			return [
@@ -250,13 +340,8 @@ class MailFetchService {
 				'skipped' => $skipped,
 			];
 		} finally {
-			if ($client !== null) {
-				try {
-					$client->disconnect();
-				} catch (\Throwable) {
-					// ignore
-				}
-			}
+			$this->disconnect($client);
+			$this->lockingProvider->releaseLock($lockKey, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}
 
@@ -289,12 +374,18 @@ class MailFetchService {
 			default => false,
 		};
 
+		$validateCert = !empty($mapping['imap_validate_cert']);
+		// Bei unverschlüsseltem IMAP ist Zertifikatsprüfung irrelevant
+		if ($encryption === false) {
+			$validateCert = false;
+		}
+
 		$cm = new ClientManager();
 		return $cm->make([
 			'host' => $host,
 			'port' => (int)$mapping['imap_port'],
 			'encryption' => $encryption,
-			'validate_cert' => false,
+			'validate_cert' => $validateCert,
 			'username' => $user,
 			'password' => $password,
 			'protocol' => 'imap',
@@ -337,20 +428,6 @@ class MailFetchService {
 		}
 	}
 
-	private function getOrCreateSubFolder(Folder $parent, string $name): Folder {
-		$name = $this->sanitizeFilename($name);
-		try {
-			$node = $parent->get($name);
-			if ($node instanceof Folder) {
-				return $node;
-			}
-			$name .= '_' . bin2hex(random_bytes(2));
-			return $parent->newFolder($name);
-		} catch (NotFoundException) {
-			return $parent->newFolder($name);
-		}
-	}
-
 	/**
 	 * @param array<string, mixed> $mapping
 	 */
@@ -368,14 +445,58 @@ class MailFetchService {
 		return true;
 	}
 
-	private function sanitizeFilename(string $name): string {
-		$name = str_replace(["\0", '/', '\\'], '-', $name);
-		$name = preg_replace('/[^\p{L}\p{N}\.\-_ ]+/u', '_', $name) ?? 'file';
-		$name = trim($name);
-		if ($name === '' || $name === '.' || $name === '..') {
-			$name = 'anhang';
+	private function getOrCreateSubFolder(Folder $parent, string $name): Folder {
+		$name = AttachmentNamer::sanitizeFilename($name);
+		try {
+			$node = $parent->get($name);
+			if ($node instanceof Folder) {
+				return $node;
+			}
+			$name .= '_' . bin2hex(random_bytes(2));
+			return $parent->newFolder($name);
+		} catch (NotFoundException) {
+			return $parent->newFolder($name);
 		}
-		return mb_substr($name, 0, 180);
+	}
+
+	/**
+	 * Speichert die E-Mail als .eml (bevorzugt) neben den Anhängen.
+	 *
+	 * @param array<string, mixed> $meta
+	 */
+	private function storeMailSidecar(
+		Folder $folder,
+		Message $message,
+		array $meta,
+		int $uid,
+		?\DateTimeInterface $messageDate,
+		bool $prefixName,
+	): ?string {
+		$raw = '';
+		try {
+			$raw = $message->getRawBody();
+		} catch (\Throwable) {
+			$raw = '';
+		}
+
+		if ($raw !== '') {
+			$base = $prefixName
+				? AttachmentNamer::buildPrefixedName('mail.eml', $uid, $messageDate)
+				: 'mail.eml';
+			$filename = $this->uniqueFilename($folder, $base);
+			$folder->newFile($filename, $raw);
+			return $filename;
+		}
+
+		$base = $prefixName
+			? AttachmentNamer::buildPrefixedName('email.json', $uid, $messageDate)
+			: 'email.json';
+		$filename = $this->uniqueFilename($folder, $base);
+		$folder->newFile(
+			$filename,
+			json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) ?: '{}',
+		);
+		return $filename;
 	}
 
 	private function uniqueFilename(Folder $folder, string $filename): string {
@@ -393,6 +514,17 @@ class MailFetchService {
 		} while ($folder->nodeExists($candidate));
 
 		return $candidate;
+	}
+
+	private function disconnect(?Client $client): void {
+		if ($client === null) {
+			return;
+		}
+		try {
+			$client->disconnect();
+		} catch (\Throwable) {
+			// ignore
+		}
 	}
 
 	private function friendlyError(\Throwable $e): string {

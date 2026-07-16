@@ -19,6 +19,9 @@ Hinweise für AI-Agents, die in diesem Repository arbeiten.
 - Nextcloud 28–34 (Docker-Dev: `nextcloud:34-apache`)
 - PHP 8.1–8.4 (in `info.xml` `max-version` auf **8.5** setzen – Nextcloud behandelt PHP-`max-version` exklusiv)
 - IMAP via `webklex/php-imap` (Composer, **keine** php-imap Extension)
+- Anhänge default **flach** im Zielordner: `{Ymd_His}_uid{N}_{dateiname}`
+- Optional: `create_mail_folder` (Unterordner pro Mail), `save_mail_file` (.eml neben Anhänge) – beide Default aus
+- Cursor: `last_uid` + `uidvalidity` (Reset bei UIDVALIDITY-Wechsel); Config-Writes unter Lock
 - MariaDB, GreenMail (SMTP 3025 / IMAP 3143)
 - Admin-UI: Plain JS + Nextcloud Settings API (kein Vue-Build)
 - E2E: Python 3 (stdlib only)
