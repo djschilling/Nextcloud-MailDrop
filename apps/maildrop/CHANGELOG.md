@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+
+- Admin folder picker browses the selected target user's folders (not only the logged-in admin)
+
 ## 1.1.1
 
 - Fix IMAP UID fetch on IONOS and similar servers (`getByUidGreater`)

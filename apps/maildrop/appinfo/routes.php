@@ -15,6 +15,11 @@ return [
 			'verb' => 'GET',
 		],
 		[
+			'name' => 'config#listFolders',
+			'url' => '/api/folders',
+			'verb' => 'GET',
+		],
+		[
 			'name' => 'config#save',
 			'url' => '/api/config',
 			'verb' => 'PUT',
