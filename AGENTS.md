@@ -20,8 +20,8 @@ Notes for AI agents working in this repository.
 
 ## Tech stack
 
-- Nextcloud 28–34 (Docker dev image often `nextcloud:31-apache` or `34-apache`)
-- PHP 8.1–8.4 (set `max-version` to **8.5** in `info.xml` – Nextcloud treats PHP `max-version` as exclusive)
+- Nextcloud 28–36 (Docker dev image often `nextcloud:31-apache` or `34-apache`)
+- PHP ≥ 8.1 (no PHP `max-version` in `info.xml` – follow the PHP range of the supported Nextcloud; App Store allows Nextcloud `max-version` = latest major +1)
 - IMAP via `webklex/php-imap` (Composer, **no** php-imap extension)
 - Attachments default **flat**: `{Ymd_His}_uid{N}_{filename}` via `AttachmentNamer`
 - Optional: `create_mail_folder`, `save_mail_file` – both **false** by default

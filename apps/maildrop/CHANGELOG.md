@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3
+
+- Extend Nextcloud compatibility to 28–36
+- Drop PHP `max-version` so supported PHP follows the Nextcloud server range
+
 ## 1.1.2
 
 - Admin folder picker browses the selected target user's folders (not only the logged-in admin)

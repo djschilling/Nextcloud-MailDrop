@@ -21,8 +21,8 @@ Nextcloud app **MailDrop**: fetches email via **IMAP**, extracts attachments, an
 
 ## Requirements
 
-- Nextcloud **28–34**
-- PHP **8.1–8.4** (declared `max-version` 8.5 in `info.xml` because Nextcloud treats PHP max as exclusive)
+- Nextcloud **28–36**
+- PHP **≥ 8.1** (no PHP `max-version` in `info.xml`; use a PHP version supported by your Nextcloud)
 - Working system cron (for the background job)
 - Outbound IMAP access to the mail server
 
