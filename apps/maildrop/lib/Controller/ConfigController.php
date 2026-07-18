@@ -6,6 +6,7 @@ namespace OCA\MailDrop\Controller;
 
 use OCA\MailDrop\Service\ConfigService;
 use OCA\MailDrop\Service\MailFetchService;
+use OCA\MailDrop\Service\UserFolderBrowser;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
@@ -20,6 +21,7 @@ class ConfigController extends Controller {
 		IRequest $request,
 		private ConfigService $configService,
 		private MailFetchService $mailFetchService,
+		private UserFolderBrowser $userFolderBrowser,
 		private IUserManager $userManager,
 		private IL10N $l10n,
 	) {
@@ -73,6 +75,25 @@ class ConfigController extends Controller {
 		);
 
 		return new DataResponse(['users' => array_slice($users, 0, $limit)]);
+	}
+
+	/**
+	 * List folders in a target user's home (admin folder picker).
+	 */
+	public function listFolders(): DataResponse {
+		$userId = trim((string)$this->request->getParam('user', ''));
+		$path = (string)$this->request->getParam('path', '/');
+
+		try {
+			return new DataResponse($this->userFolderBrowser->listFolders($userId, $path));
+		} catch (\InvalidArgumentException $e) {
+			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+		} catch (\Throwable $e) {
+			return new DataResponse(
+				['message' => $this->l10n->t('Could not list folders: %1$s', [$e->getMessage()])],
+				Http::STATUS_INTERNAL_SERVER_ERROR,
+			);
+		}
 	}
 
 	public function save(): DataResponse {

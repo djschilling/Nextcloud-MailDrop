@@ -149,9 +149,9 @@
 							<label for="mf-target-path">${escapeHtml(tr('Target folder'))}</label>
 							<span class="maildrop-path-row">
 								<input type="text" id="mf-target-path" value="${escapeAttr(mapping.target_path)}" placeholder="/Mail-Anhänge">
-								<button type="button" id="mf-pick-path" title="${escapeAttr(tr('Choose folder via Nextcloud file picker'))}">${escapeHtml(tr('Choose folder…'))}</button>
+								<button type="button" id="mf-pick-path" title="${escapeAttr(tr('Browse folders of the selected target user'))}">${escapeHtml(tr('Choose folder…'))}</button>
 							</span>
-							<em class="maildrop-hint">${escapeHtml(tr('Default: store attachments flat here (prefix date_uid…). Optional per-mail subfolder / save .eml (see below). The dialog shows files of the logged-in admin.'))}</em>
+							<em class="maildrop-hint">${escapeHtml(tr('Default: store attachments flat here (prefix date_uid…). Optional per-mail subfolder / save .eml (see below). The folder dialog browses the selected target user.'))}</em>
 						</p>
 
 						<h3>${escapeHtml(tr('Filters & behaviour'))}</h3>
@@ -338,16 +338,6 @@
 			statusEl.textContent = message
 			statusEl.className = 'maildrop-status maildrop-status--' + type
 		}
-	}
-
-	function currentUserId() {
-		if (typeof OC.getCurrentUser === 'function') {
-			const user = OC.getCurrentUser()
-			if (user && user.uid) {
-				return String(user.uid)
-			}
-		}
-		return typeof OC.currentUser === 'string' ? OC.currentUser : ''
 	}
 
 	function formatUserLabel(user) {
@@ -573,26 +563,15 @@
 	}
 
 	/**
-	 * Native Nextcloud folder dialog (OC.dialogs.filepicker → @nextcloud/dialogs).
-	 * Shows files of the logged-in user – not necessarily target_user.
+	 * Folder dialog for the selected target_user (via GET /api/folders).
+	 * Unlike OC.dialogs.filepicker, this is not limited to the logged-in admin.
 	 */
 	function pickTargetFolder(setStatus) {
-		if (typeof OC.dialogs === 'undefined' || typeof OC.dialogs.filepicker !== 'function') {
-			setStatus(tr('Folder picker is not available in this Nextcloud version. Please enter the path manually.'), 'error')
-			return
-		}
-
 		const pathInput = document.getElementById('mf-target-path')
 		const targetUser = document.getElementById('mf-target-user').value.trim()
-		const me = currentUserId()
-		if (targetUser && me && targetUser !== me) {
-			setStatus(
-				tr('Note: The dialog shows files of "{me}", target user is "{target}". Set the path manually if needed, or set the target user to the logged-in admin.', {
-					me,
-					target: targetUser,
-				}),
-				'info',
-			)
+		if (!targetUser) {
+			setStatus(tr('Please select a target user first.'), 'error')
+			return
 		}
 
 		let startPath = (pathInput.value || '/').trim() || '/'
@@ -600,23 +579,172 @@
 			startPath = '/' + startPath
 		}
 
-		const type = OC.dialogs.FILEPICKER_TYPE_CHOOSE || 1
-		OC.dialogs.filepicker(
-			tr('Choose target folder'),
-			(path) => {
-				let chosen = path || '/'
-				if (!chosen.startsWith('/')) {
-					chosen = '/' + chosen
-				}
-				pathInput.value = chosen
-			},
-			false,
-			['httpd/unix-directory'],
-			true,
-			type,
+		openFolderPicker({
+			userId: targetUser,
 			startPath,
-			{ allowDirectoryChooser: true },
-		)
+			onSelect: (path) => {
+				pathInput.value = path || '/'
+			},
+			onError: (message) => {
+				setStatus(message, 'error')
+			},
+		})
+	}
+
+	function openFolderPicker({ userId, startPath, onSelect, onError }) {
+		const existing = document.getElementById('maildrop-folder-picker')
+		if (existing) {
+			existing.remove()
+		}
+
+		const overlay = document.createElement('div')
+		overlay.id = 'maildrop-folder-picker'
+		overlay.className = 'maildrop-folder-picker'
+		overlay.setAttribute('role', 'dialog')
+		overlay.setAttribute('aria-modal', 'true')
+		overlay.setAttribute('aria-labelledby', 'maildrop-folder-picker-title')
+		overlay.innerHTML = `
+			<div class="maildrop-folder-picker__dialog">
+				<header class="maildrop-folder-picker__header">
+					<h3 id="maildrop-folder-picker-title">${escapeHtml(tr('Choose target folder'))}</h3>
+					<p class="maildrop-folder-picker__user">${escapeHtml(tr('User: {user}', { user: userId }))}</p>
+				</header>
+				<nav class="maildrop-folder-picker__crumb" id="mf-fp-crumb" aria-label="${escapeAttr(tr('Current path'))}"></nav>
+				<div class="maildrop-folder-picker__list" id="mf-fp-list" role="listbox" aria-label="${escapeAttr(tr('Folders'))}">
+					<p class="maildrop-folder-picker__empty">${escapeHtml(tr('Loading folders…'))}</p>
+				</div>
+				<footer class="maildrop-folder-picker__footer">
+					<button type="button" id="mf-fp-cancel">${escapeHtml(tr('Cancel'))}</button>
+					<button type="button" class="primary" id="mf-fp-select">${escapeHtml(tr('Select this folder'))}</button>
+				</footer>
+			</div>
+		`
+		document.body.appendChild(overlay)
+
+		const crumbEl = overlay.querySelector('#mf-fp-crumb')
+		const listEl = overlay.querySelector('#mf-fp-list')
+		const selectBtn = overlay.querySelector('#mf-fp-select')
+		const cancelBtn = overlay.querySelector('#mf-fp-cancel')
+		let currentPath = startPath || '/'
+		let closed = false
+
+		const close = () => {
+			if (closed) {
+				return
+			}
+			closed = true
+			document.removeEventListener('keydown', onKeyDown, true)
+			overlay.remove()
+		}
+
+		const onKeyDown = (event) => {
+			if (event.key === 'Escape') {
+				event.preventDefault()
+				close()
+			}
+		}
+		document.addEventListener('keydown', onKeyDown, true)
+
+		cancelBtn.addEventListener('click', close)
+		overlay.addEventListener('click', (event) => {
+			if (event.target === overlay) {
+				close()
+			}
+		})
+		selectBtn.addEventListener('click', () => {
+			onSelect(currentPath)
+			close()
+		})
+
+		const renderCrumb = (path) => {
+			const parts = path === '/' ? [] : path.split('/').filter(Boolean)
+			let built = ''
+			const items = [{ label: tr('Home'), path: '/' }]
+			parts.forEach((part) => {
+				built += '/' + part
+				items.push({ label: part, path: built })
+			})
+			crumbEl.innerHTML = items.map((item, index) => {
+				const isLast = index === items.length - 1
+				if (isLast) {
+					return '<span class="maildrop-folder-picker__crumb-current">' + escapeHtml(item.label) + '</span>'
+				}
+				return '<button type="button" class="maildrop-folder-picker__crumb-link" data-path="'
+					+ escapeAttr(item.path) + '">' + escapeHtml(item.label) + '</button>'
+					+ '<span class="maildrop-folder-picker__crumb-sep" aria-hidden="true">/</span>'
+			}).join('')
+			crumbEl.querySelectorAll('.maildrop-folder-picker__crumb-link').forEach((btn) => {
+				btn.addEventListener('click', () => {
+					loadPath(btn.getAttribute('data-path') || '/')
+				})
+			})
+		}
+
+		const renderFolders = (folders, parent) => {
+			const rows = []
+			if (parent) {
+				rows.push(
+					'<button type="button" class="maildrop-folder-picker__item maildrop-folder-picker__item--up" data-path="'
+					+ escapeAttr(parent) + '" role="option">'
+					+ '<span class="maildrop-folder-picker__icon" aria-hidden="true">↑</span>'
+					+ '<span>' + escapeHtml(tr('Parent folder')) + '</span>'
+					+ '</button>',
+				)
+			}
+			if (!folders.length && !parent) {
+				listEl.innerHTML = '<p class="maildrop-folder-picker__empty">'
+					+ escapeHtml(tr('No subfolders in this directory.')) + '</p>'
+				return
+			}
+			if (!folders.length) {
+				rows.push('<p class="maildrop-folder-picker__empty">'
+					+ escapeHtml(tr('No subfolders in this directory.')) + '</p>')
+			} else {
+				folders.forEach((folder) => {
+					rows.push(
+						'<button type="button" class="maildrop-folder-picker__item" data-path="'
+						+ escapeAttr(folder.path) + '" role="option">'
+						+ '<span class="maildrop-folder-picker__icon" aria-hidden="true"></span>'
+						+ '<span>' + escapeHtml(folder.name) + '</span>'
+						+ '</button>',
+					)
+				})
+			}
+			listEl.innerHTML = rows.join('')
+			listEl.querySelectorAll('.maildrop-folder-picker__item').forEach((item) => {
+				item.addEventListener('click', () => {
+					loadPath(item.getAttribute('data-path') || '/')
+				})
+			})
+		}
+
+		const loadPath = async (path, allowFallback) => {
+			const requested = path || '/'
+			listEl.innerHTML = '<p class="maildrop-folder-picker__empty">'
+				+ escapeHtml(tr('Loading folders…')) + '</p>'
+			selectBtn.disabled = true
+			try {
+				const data = await api(
+					'GET',
+					'/apps/maildrop/api/folders?user=' + encodeURIComponent(userId)
+					+ '&path=' + encodeURIComponent(requested),
+				)
+				currentPath = data.path || '/'
+				renderCrumb(currentPath)
+				renderFolders(Array.isArray(data.folders) ? data.folders : [], data.parent || null)
+				selectBtn.disabled = false
+			} catch (error) {
+				if (allowFallback !== false && requested !== '/') {
+					await loadPath('/', false)
+					return
+				}
+				close()
+				onError(error.message || tr('Could not load folders.'))
+			}
+		}
+
+		loadPath(startPath, true)
+		selectBtn.focus()
 	}
 
 	function collectPayload() {

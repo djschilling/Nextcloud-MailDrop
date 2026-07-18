@@ -31,7 +31,7 @@ Notes for AI agents working in this repository.
 - MariaDB, GreenMail (SMTP 3025 / IMAP 3143)
 - Admin UI: plain JS + Nextcloud Settings API (no Vue build)
 - l10n: English source strings + `l10n/en.*` / `l10n/de.*`
-- E2E: Python 3 (stdlib only); unit: `tests/Unit/AttachmentNamerTest.php`
+- E2E: Python 3 (stdlib only); unit: `tests/Unit/*.php` (`AttachmentNamerTest`, `UserFolderBrowserTest`)
 
 ## Important commands
 
@@ -53,8 +53,9 @@ docker compose exec -u www-data nextcloud php occ maildrop:fetch
 docker compose exec -u www-data nextcloud php occ maildrop:fetch -m <mapping-id>
 docker compose exec -u www-data nextcloud php occ upgrade
 
-# Unit test
+# Unit tests
 php apps/maildrop/tests/Unit/AttachmentNamerTest.php
+php apps/maildrop/tests/Unit/UserFolderBrowserTest.php
 
 # Manual test mail
 python3 scripts/send-test-mail.py
@@ -127,8 +128,8 @@ Never misuse the app key `enabled` as a feature flag.
 - Legacy single-config (flat keys like `imap_host`, …) is migrated automatically on first read
 - Admin UI: list on the left, editor on the right
 - Target user: compact combobox; `GET /api/users`; dropdown on `document.body` (settings layout clips otherwise)
-- Target folder: `OC.dialogs.filepicker` (folders only); shows files of the **logged-in** admin, not necessarily `target_user`
-- API: `GET/PUT /api/config`, `GET /api/users`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test`, `POST /api/fetch`, `POST /api/mappings/{id}/reset-cursor`
+- Target folder: custom dialog via `GET /api/folders?user=&path=` (browses selected `target_user`, not only the logged-in admin)
+- API: `GET/PUT /api/config`, `GET /api/users`, `GET /api/folders`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test`, `POST /api/fetch`, `POST /api/mappings/{id}/reset-cursor`
 - Tests/scripts: configure via `ConfigService::saveMappings()` – **not** flat `occ config:app:set maildrop imap_*`
 
 ### IMAP UID search
@@ -180,7 +181,7 @@ Never misuse the app key `enabled` as a feature flag.
 
 ## Tests & CI
 
-- Unit: `apps/maildrop/tests/Unit/AttachmentNamerTest.php` (CI runs this)
+- Unit: `apps/maildrop/tests/Unit/*.php` (CI runs these)
 - E2E: `tests/integration/test_mail_to_nextcloud.py`
   - SMTP → GreenMail → `occ maildrop:fetch` → WebDAV
   - scenarios: `flat-default`, `mail-folder`, `save-mail-file`, `folder-and-eml`
