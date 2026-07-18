@@ -235,3 +235,13 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - Do not re-enable the local `./apps` bind-mount in CI
 - Do not publish release archives without `vendor/`
 - Do not leave hardcoded UI language strings outside l10n
+
+## Cursor Cloud specific instructions
+
+The startup update script only runs `composer install` in `apps/maildrop/`. Everything else is a manual step below (standard commands live in the sections above / README).
+
+- **Docker is not started automatically.** There is no systemd in the VM, so start the daemon manually and leave it running in the background (e.g. a tmux session): `sudo dockerd`. Then run the normal `docker compose ...` commands from the repo root. The `ubuntu` user is in the `docker` group, so `sudo` is not needed for `docker`/`docker compose` themselves.
+- Docker is configured for docker-in-docker with the `fuse-overlayfs` storage driver and the containerd snapshotter disabled (required for Docker 29 in this VM) via `/etc/docker/daemon.json`; `iptables` is set to `iptables-legacy`. If networking/overlay errors appear, verify these before debugging further.
+- Local dev uses the `./apps` bind-mount (`docker compose up -d`, then `occ app:enable maildrop`). This differs from CI, which copies the app in. After Nextcloud first boots, wait for `status.php` to report `"installed":true` before running `occ` (first install takes ~10-60s).
+- PHP CLI and Composer are provided as system packages (not in the update script). The unit test is a plain PHP script (`php apps/maildrop/tests/Unit/AttachmentNamerTest.php`), not PHPUnit.
+- The E2E test (`python3 tests/integration/test_mail_to_nextcloud.py`) reconfigures the `mappings` app config and leaves a mapping behind; delete it with `occ config:app:delete maildrop mappings` for a clean UI state.
