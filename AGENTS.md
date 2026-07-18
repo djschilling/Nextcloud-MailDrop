@@ -15,7 +15,7 @@ Notes for AI agents working in this repository.
 | GitHub | `djschilling/Nextcloud-MailDrop` |
 | License | MIT (`LICENSE`, `apps/maildrop/LICENSE`) |
 | Author | David Schilling `<davejs92@gmail.com>` |
-| Current version | see `apps/maildrop/appinfo/info.xml` (released tags: `v1.0.0`, `v1.0.1`, `v1.1.0`, `v1.1.1`) |
+| Current version | see `apps/maildrop/appinfo/info.xml` (released tags: `v1.0.0`, `v1.0.1`, `v1.1.0`, `v1.1.1`, `v1.1.2`) |
 | Changelog | `apps/maildrop/CHANGELOG.md` |
 
 ## Tech stack
