@@ -20,8 +20,8 @@ Notes for AI agents working in this repository.
 
 ## Tech stack
 
-- Nextcloud 28–36 (Docker dev image often `nextcloud:31-apache` or `34-apache`)
-- PHP ≥ 8.1 (no PHP `max-version` in `info.xml` – follow the PHP range of the supported Nextcloud; App Store allows Nextcloud `max-version` = latest major +1)
+- Nextcloud 28–35 (Docker dev image often `nextcloud:31-apache` or `34-apache`; App Store `max-version` = latest stable +1)
+- PHP ≥ 8.1 (no PHP `max-version` in `info.xml` – follow the PHP range of the supported Nextcloud)
 - IMAP via `webklex/php-imap` (Composer, **no** php-imap extension)
 - Attachments default **flat**: `{Ymd_His}_uid{N}_{filename}` via `AttachmentNamer`
 - Optional: `create_mail_folder`, `save_mail_file` – both **false** by default
@@ -31,7 +31,7 @@ Notes for AI agents working in this repository.
 - MariaDB, GreenMail (SMTP 3025 / IMAP 3143)
 - Admin UI: plain JS + Nextcloud Settings API (no Vue build)
 - l10n: English source strings + `l10n/en.*` / `l10n/de.*`
-- E2E: Python 3 (stdlib only); unit: `tests/Unit/*.php` (`AttachmentNamerTest`, `UserFolderBrowserTest`)
+- E2E: Python 3 (stdlib only); unit: `tests/Unit/*.php` (`AttachmentNamerTest`, `UserFolderBrowserTest`, `ConfigServiceKeysTest`)
 
 ## Important commands
 
@@ -51,11 +51,14 @@ docker compose down -v             # reset including data
 docker compose exec -u www-data nextcloud php occ app:enable maildrop
 docker compose exec -u www-data nextcloud php occ maildrop:fetch
 docker compose exec -u www-data nextcloud php occ maildrop:fetch -m <mapping-id>
+docker compose exec -u www-data nextcloud php occ maildrop:purge-config
+docker compose exec -u www-data nextcloud php occ maildrop:purge-config --yes
 docker compose exec -u www-data nextcloud php occ upgrade
 
 # Unit tests
 php apps/maildrop/tests/Unit/AttachmentNamerTest.php
 php apps/maildrop/tests/Unit/UserFolderBrowserTest.php
+php apps/maildrop/tests/Unit/ConfigServiceKeysTest.php
 
 # Manual test mail
 python3 scripts/send-test-mail.py
@@ -92,8 +95,12 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 | `lib/Service/AttachmentNamer.php` | Filename sanitize / flat prefix helper |
 | `lib/BackgroundJob/FetchMailJob.php` | TimedJob every 300s |
 | `lib/Command/FetchCommand.php` | `occ maildrop:fetch` (`-m` optional) |
+| `lib/Command/PurgeConfigCommand.php` | `occ maildrop:purge-config` (wipe mappings; `--yes` to apply) |
+| `lib/Migration/CleanupLegacyConfig.php` | post-migration: drop leftover flat IMAP keys |
 | `lib/Controller/ConfigController.php` | REST API for admin UI |
 | `lib/Settings/` | Admin section + form (`Util::addTranslations`) |
+| `img/app.svg` | Settings / Apps icon |
+| `img/screenshot-*.png` | App Store screenshots (HTTPS URLs in `info.xml`) |
 | `js/admin.js` / `css/admin.css` | Settings UI (`t('maildrop', …)`) |
 | `l10n/*.json` / `l10n/*.js` | Translations (`en`, `de`); keep both `.json` and `.js` in sync |
 | `CHANGELOG.md` / `LICENSE` | App Store / release metadata |
@@ -125,7 +132,9 @@ Never misuse the app key `enabled` as a feature flag.
 
 - Stored as JSON in app config `mappings`
 - Each mapping has its own IMAP data, filters, target folder, `fetch_enabled`, cursor, and run status
-- Legacy single-config (flat keys like `imap_host`, …) is migrated automatically on first read
+- Legacy single-config (flat keys like `imap_host`, …) is migrated automatically on first read; leftover flat keys are then deleted (also via post-migration repair)
+- Do **not** register a destructive `uninstall` repair step – Nextcloud also runs those when the app is only disabled
+- Full config wipe: `occ maildrop:purge-config --yes` (app must still be enabled; imported files stay)
 - Admin UI: list on the left, editor on the right
 - Target user: compact combobox; `GET /api/users`; dropdown on `document.body` (settings layout clips otherwise)
 - Target folder: custom dialog via `GET /api/folders?user=&path=` (browses selected `target_user`, not only the logged-in admin)
@@ -221,8 +230,9 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 ```
 
 - Archive root must be `maildrop/`
-- Include `vendor/`, `l10n/`, `LICENSE`, `CHANGELOG.md`
+- Include `vendor/`, `l10n/`, `LICENSE`, `CHANGELOG.md`, `img/`
 - GitHub release tag `vX.Y.Z` must match `info.xml` version
+- App Store: sign with `~/.nextcloud/certificates/maildrop.{key,crt}` (never commit); `build-release.sh` writes `appinfo/signature.json` into the staged archive only
 - Do not put server install helpers with secrets into this repo
 
 ## Do not
@@ -236,6 +246,8 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - Do not re-enable the local `./apps` bind-mount in CI
 - Do not publish release archives without `vendor/`
 - Do not leave hardcoded UI language strings outside l10n
+- Do not commit `maildrop.key`, `maildrop.crt`, or `appinfo/signature.json`
+- Do not set `nextcloud max-version` higher than latest stable + 1 (App Store rule)
 
 ## Cursor Cloud specific instructions
 

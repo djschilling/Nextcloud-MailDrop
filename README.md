@@ -21,7 +21,7 @@ Nextcloud app **MailDrop**: fetches email via **IMAP**, extracts attachments, an
 
 ## Requirements
 
-- Nextcloud **28–36**
+- Nextcloud **28–35**
 - PHP **≥ 8.1** (no PHP `max-version` in `info.xml`; use a PHP version supported by your Nextcloud)
 - Working system cron (for the background job)
 - Outbound IMAP access to the mail server
@@ -57,6 +57,8 @@ docker compose exec -u www-data app php occ app:enable maildrop
 ```
 
 Output: `dist/maildrop-<version>.tar.gz` (includes `vendor/`) and optional `.sha256`.
+
+If `~/.nextcloud/certificates/maildrop.key` and `maildrop.crt` exist, the script signs the staged app (`appinfo/signature.json`) via `OCC=…` or a running Docker Nextcloud. Use `SKIP_SIGN=1` to build an unsigned archive. Do not commit the private key or `signature.json`.
 
 ## Configuration (admin UI)
 
@@ -155,6 +157,7 @@ apps/maildrop/              # Nextcloud MailDrop app
   appinfo/                  # info.xml, routes
   lib/                      # PHP services, settings, occ, job
   js/ css/ templates/       # Admin UI
+  img/                      # App icon + App Store screenshots
   l10n/                     # en + de translations
   tests/Unit/               # Unit tests
   CHANGELOG.md
@@ -184,9 +187,20 @@ flowchart LR
 - Bundles: `apps/maildrop/l10n/en.*` and `apps/maildrop/l10n/de.*`
 - UI language follows the logged-in Nextcloud user’s language
 
+## Remove stored configuration
+
+Disabling the app keeps mappings and encrypted IMAP passwords (Nextcloud also runs uninstall hooks on disable). Imported files in Nextcloud Files are never deleted by MailDrop.
+
+To wipe MailDrop’s app config while the app is still enabled:
+
+```bash
+sudo -u www-data php /path/to/nextcloud/occ maildrop:purge-config        # dry run
+sudo -u www-data php /path/to/nextcloud/occ maildrop:purge-config --yes
+```
+
 ## Production notes
 
-- IMAP credentials are stored encrypted via Nextcloud’s crypto API.
+- IMAP credentials are stored encrypted via Nextcloud’s crypto API. MailDrop does not send mail or credentials to third parties.
 - Prefer SSL/TLS and strong passwords for real mailboxes.
 - After installing or upgrading, use **Reset cursor** if a previous failed fetch left the cursor stuck.
 - Set target folder and user deliberately; use subject/sender filters when one mailbox feeds multiple workflows.
@@ -197,7 +211,7 @@ flowchart LR
 |---------|----------------|
 | `0 imported, 0 skipped`, cursor stays at UID 0 | UID search failed (fixed in 1.1.1 via `getByUidGreater`); upgrade and reset cursor |
 | Fetch OK but no files | Wrong IMAP folder (e.g. Sent vs INBOX), filters, or attachment not detected |
-| Files in unexpected place | Check **target user** and **target folder**; file picker shows the logged-in admin’s files |
+| Files in unexpected place | Check **target user** and **target folder**; the folder dialog browses the selected target user |
 | IMAP login fails after save | Password re-encrypted incorrectly; set the password again and save |
 
 ## Stop / reset

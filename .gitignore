@@ -4,4 +4,5 @@
 .idea/
 .vscode/
 apps/maildrop/vendor/
+apps/maildrop/appinfo/signature.json
 dist/

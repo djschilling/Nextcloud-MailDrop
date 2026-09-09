@@ -75,6 +75,7 @@ if command -v rsync >/dev/null; then
 		--exclude '.php-cs-fixer*' \
 		--exclude '.DS_Store' \
 		--exclude '*.log' \
+		--exclude 'appinfo/signature.json' \
 		"$APP_DIR/" "$STAGE/$APP_ID/"
 else
 	(
@@ -84,6 +85,7 @@ else
 			--exclude 'node_modules' \
 			--exclude 'tests' \
 			--exclude '.DS_Store' \
+			--exclude 'appinfo/signature.json' \
 			. | tar -xf - -C "$STAGE/$APP_ID"
 	)
 fi
@@ -92,6 +94,52 @@ if [[ ! -f "$STAGE/$APP_ID/vendor/autoload.php" ]]; then
 	echo "error: vendor/autoload.php missing in staged app – composer install failed?" >&2
 	exit 1
 fi
+
+sign_staged_app() {
+	local cert_dir="${MAILDROP_CERT_DIR:-$HOME/.nextcloud/certificates}"
+	local key="$cert_dir/${APP_ID}.key"
+	local crt="$cert_dir/${APP_ID}.crt"
+	local staged="$STAGE/$APP_ID"
+
+	if [[ "${SKIP_SIGN:-}" == "1" ]]; then
+		echo "==> skipping code signing (SKIP_SIGN=1)"
+		return 0
+	fi
+	if [[ ! -f "$key" || ! -f "$crt" ]]; then
+		echo "==> unsigned archive (no ${APP_ID}.key / ${APP_ID}.crt in $cert_dir)"
+		echo "    App Store uploads require a signed certificate; GitHub releases can stay unsigned."
+		return 0
+	fi
+
+	echo "==> signing staged app"
+	if [[ -n "${OCC:-}" ]]; then
+		php "$OCC" integrity:sign-app \
+			--privateKey="$key" \
+			--certificate="$crt" \
+			--path="$staged"
+	elif docker compose -f "$ROOT/docker-compose.yml" ps --status running --services 2>/dev/null | grep -qx nextcloud; then
+		docker compose -f "$ROOT/docker-compose.yml" run --rm --no-deps \
+			-v "$cert_dir:/certs:ro" \
+			-v "$staged:/sign-app:rw" \
+			-u www-data \
+			nextcloud php occ integrity:sign-app \
+				--privateKey="/certs/${APP_ID}.key" \
+				--certificate="/certs/${APP_ID}.crt" \
+				--path=/sign-app
+	else
+		echo "error: certificates found but cannot sign." >&2
+		echo "  Set OCC=/path/to/nextcloud/occ, start docker compose (nextcloud), or SKIP_SIGN=1" >&2
+		exit 1
+	fi
+
+	if [[ ! -f "$staged/appinfo/signature.json" ]]; then
+		echo "error: appinfo/signature.json missing after signing" >&2
+		exit 1
+	fi
+	echo "    wrote appinfo/signature.json"
+}
+
+sign_staged_app
 
 staged_version="$(sed -nE 's/.*<version>([^<]+)<\/version>.*/\1/p' "$STAGE/$APP_ID/appinfo/info.xml" | head -n1)"
 if [[ "$staged_version" != "$VERSION" ]]; then

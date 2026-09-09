@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\MailDrop\Settings;
 
+use OCA\MailDrop\AppInfo\Application;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\IIconSection;
@@ -28,6 +29,6 @@ class AdminSection implements IIconSection {
 	}
 
 	public function getIcon(): string {
-		return $this->urlGenerator->imagePath('core', 'actions/mail.svg');
+		return $this->urlGenerator->imagePath(Application::APP_ID, 'app.svg');
 	}
 }

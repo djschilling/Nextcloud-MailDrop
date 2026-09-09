@@ -38,6 +38,7 @@ jobs:
         run: |
           php tests/Unit/AttachmentNamerTest.php
           php tests/Unit/UserFolderBrowserTest.php
+          php tests/Unit/ConfigServiceKeysTest.php
 
       - name: Pull images
         run: docker compose pull db mail nextcloud

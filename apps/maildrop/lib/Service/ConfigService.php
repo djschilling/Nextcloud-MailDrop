@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\MailDrop\Service;
 
+use OCA\MailDrop\AppInfo\Application;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\Lock\ILockingProvider;
@@ -13,6 +14,40 @@ use OCP\Security\ICrypto;
 class ConfigService {
 	private const MAPPINGS_KEY = 'mappings';
 	private const LOCK_KEY = 'maildrop/mappings';
+
+	/** Nextcloud-managed keys that must survive `purgeStoredConfig()`. */
+	public const PRESERVED_APP_KEYS = ['enabled', 'installed_version', 'types'];
+
+	/**
+	 * Flat keys from the pre-mappings config. Migrated into `mappings` JSON
+	 * and then removed so leftover IMAP passwords are not kept twice.
+	 *
+	 * @var list<string>
+	 */
+	public const LEGACY_FLAT_KEYS = [
+		'imap_host',
+		'imap_port',
+		'imap_encryption',
+		'imap_validate_cert',
+		'imap_user',
+		'imap_password',
+		'imap_folder',
+		'target_user',
+		'target_path',
+		'mark_as_seen',
+		'delete_after_import',
+		'subject_filter',
+		'sender_filter',
+		'fetch_enabled',
+		'max_attachment_bytes',
+		'create_mail_folder',
+		'save_mail_file',
+		'last_uid',
+		'uidvalidity',
+		'last_run',
+		'last_status',
+		'last_error',
+	];
 
 	public function __construct(
 		private IConfig $config,
@@ -187,11 +222,67 @@ class ConfigService {
 	}
 
 	public function get(string $key, string $default = ''): string {
-		return $this->config->getAppValue('maildrop', $key, $default);
+		return $this->config->getAppValue(Application::APP_ID, $key, $default);
 	}
 
 	public function set(string $key, string $value): void {
-		$this->config->setAppValue('maildrop', $key, $value);
+		$this->config->setAppValue(Application::APP_ID, $key, $value);
+	}
+
+	/**
+	 * App-config keys that a purge would delete (everything except Nextcloud-managed keys).
+	 *
+	 * @param list<string> $existingKeys
+	 * @return list<string>
+	 */
+	public static function keysToPurge(array $existingKeys): array {
+		$deleted = [];
+		foreach ($existingKeys as $key) {
+			if (!in_array($key, self::PRESERVED_APP_KEYS, true)) {
+				$deleted[] = $key;
+			}
+		}
+		return $deleted;
+	}
+
+	/**
+	 * @param list<string> $existingKeys
+	 * @return list<string>
+	 */
+	public static function leftoverLegacyKeys(array $existingKeys): array {
+		return array_values(array_intersect($existingKeys, self::LEGACY_FLAT_KEYS));
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	public function listPurgeableKeys(): array {
+		return self::keysToPurge($this->config->getAppKeys(Application::APP_ID));
+	}
+
+	/**
+	 * Remove leftover pre-mappings keys. Safe on disable/upgrade: keeps `mappings`.
+	 */
+	public function deleteLegacyFlatKeys(): int {
+		$leftover = self::leftoverLegacyKeys($this->config->getAppKeys(Application::APP_ID));
+		foreach ($leftover as $key) {
+			$this->config->deleteAppValue(Application::APP_ID, $key);
+		}
+		return count($leftover);
+	}
+
+	/**
+	 * Delete mappings and leftover IMAP settings. Does not remove imported files
+	 * and does not touch Nextcloud's `enabled` / `installed_version` keys.
+	 *
+	 * @return list<string> deleted keys
+	 */
+	public function purgeStoredConfig(): array {
+		$deleted = self::keysToPurge($this->config->getAppKeys(Application::APP_ID));
+		foreach ($deleted as $key) {
+			$this->config->deleteAppValue(Application::APP_ID, $key);
+		}
+		return $deleted;
 	}
 
 	/**
@@ -226,6 +317,7 @@ class ConfigService {
 	 */
 	private function readMappingsUnlocked(): array {
 		$this->migrateLegacyIfNeededUnlocked();
+		$this->deleteLegacyFlatKeys();
 		$raw = $this->get(self::MAPPINGS_KEY, '[]');
 		$decoded = json_decode($raw, true);
 		if (!is_array($decoded)) {
