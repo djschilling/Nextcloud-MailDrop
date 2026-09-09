@@ -76,11 +76,6 @@ Importierte Dateien bleiben beim Deaktivieren der App erhalten. Mappings und IMA
 	<background-jobs>
 		<job>OCA\MailDrop\BackgroundJob\FetchMailJob</job>
 	</background-jobs>
-	<repair-steps>
-		<post-migration>
-			<step>OCA\MailDrop\Migration\CleanupLegacyConfig</step>
-		</post-migration>
-	</repair-steps>
 	<commands>
 		<command>OCA\MailDrop\Command\FetchCommand</command>
 		<command>OCA\MailDrop\Command\PurgeConfigCommand</command>

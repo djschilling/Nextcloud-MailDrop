@@ -3,7 +3,6 @@
 ## 1.1.4
 
 - App Store listing: Nextcloud 28–35, store description (en/de), admin screenshots, app icon
-- Remove leftover single-config IMAP keys after the mappings migration
 - Add `occ maildrop:purge-config` to delete stored mappings (imported files are kept)
 - Release script signs the archive when `~/.nextcloud/certificates/maildrop.{key,crt}` is present
 

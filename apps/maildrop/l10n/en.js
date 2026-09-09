@@ -105,8 +105,6 @@ OC.L10N.register(
     "Cursor reset – next fetch will start from UID 1." : "Cursor reset – next fetch will start from UID 1.",
     "Default" : "Default",
     "Could not serialize mappings." : "Could not serialize mappings.",
-    "Remove leftover MailDrop single-config keys after mappings migration" : "Remove leftover MailDrop single-config keys after mappings migration",
-    "Removed %1$d leftover MailDrop config key(s)." : "Removed %1$d leftover MailDrop config key(s).",
     "Remove all MailDrop mappings and leftover IMAP settings from app config. Does not delete imported files." : "Remove all MailDrop mappings and leftover IMAP settings from app config. Does not delete imported files.",
     "Actually delete stored configuration (required)." : "Actually delete stored configuration (required).",
     "No MailDrop configuration keys to delete." : "No MailDrop configuration keys to delete.",

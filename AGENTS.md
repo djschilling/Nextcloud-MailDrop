@@ -96,7 +96,6 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 | `lib/BackgroundJob/FetchMailJob.php` | TimedJob every 300s |
 | `lib/Command/FetchCommand.php` | `occ maildrop:fetch` (`-m` optional) |
 | `lib/Command/PurgeConfigCommand.php` | `occ maildrop:purge-config` (wipe mappings; `--yes` to apply) |
-| `lib/Migration/CleanupLegacyConfig.php` | post-migration: drop leftover flat IMAP keys |
 | `lib/Controller/ConfigController.php` | REST API for admin UI |
 | `lib/Settings/` | Admin section + form (`Util::addTranslations`) |
 | `img/app.svg` | Settings / Apps icon |
@@ -132,14 +131,13 @@ Never misuse the app key `enabled` as a feature flag.
 
 - Stored as JSON in app config `mappings`
 - Each mapping has its own IMAP data, filters, target folder, `fetch_enabled`, cursor, and run status
-- Legacy single-config (flat keys like `imap_host`, …) is migrated automatically on first read; leftover flat keys are then deleted (also via post-migration repair)
 - Do **not** register a destructive `uninstall` repair step – Nextcloud also runs those when the app is only disabled
 - Full config wipe: `occ maildrop:purge-config --yes` (app must still be enabled; imported files stay)
 - Admin UI: list on the left, editor on the right
 - Target user: compact combobox; `GET /api/users`; dropdown on `document.body` (settings layout clips otherwise)
 - Target folder: custom dialog via `GET /api/folders?user=&path=` (browses selected `target_user`, not only the logged-in admin)
 - API: `GET/PUT /api/config`, `GET /api/users`, `GET /api/folders`, `POST /api/mappings`, `PUT/DELETE /api/mappings/{id}`, `POST /api/test`, `POST /api/fetch`, `POST /api/mappings/{id}/reset-cursor`
-- Tests/scripts: configure via `ConfigService::saveMappings()` – **not** flat `occ config:app:set maildrop imap_*`
+- Tests/scripts: configure via `ConfigService::saveMappings()`
 
 ### IMAP UID search
 

@@ -18,37 +18,6 @@ class ConfigService {
 	/** Nextcloud-managed keys that must survive `purgeStoredConfig()`. */
 	public const PRESERVED_APP_KEYS = ['enabled', 'installed_version', 'types'];
 
-	/**
-	 * Flat keys from the pre-mappings config. Migrated into `mappings` JSON
-	 * and then removed so leftover IMAP passwords are not kept twice.
-	 *
-	 * @var list<string>
-	 */
-	public const LEGACY_FLAT_KEYS = [
-		'imap_host',
-		'imap_port',
-		'imap_encryption',
-		'imap_validate_cert',
-		'imap_user',
-		'imap_password',
-		'imap_folder',
-		'target_user',
-		'target_path',
-		'mark_as_seen',
-		'delete_after_import',
-		'subject_filter',
-		'sender_filter',
-		'fetch_enabled',
-		'max_attachment_bytes',
-		'create_mail_folder',
-		'save_mail_file',
-		'last_uid',
-		'uidvalidity',
-		'last_run',
-		'last_status',
-		'last_error',
-	];
-
 	public function __construct(
 		private IConfig $config,
 		private ICrypto $crypto,
@@ -246,14 +215,6 @@ class ConfigService {
 	}
 
 	/**
-	 * @param list<string> $existingKeys
-	 * @return list<string>
-	 */
-	public static function leftoverLegacyKeys(array $existingKeys): array {
-		return array_values(array_intersect($existingKeys, self::LEGACY_FLAT_KEYS));
-	}
-
-	/**
 	 * @return list<string>
 	 */
 	public function listPurgeableKeys(): array {
@@ -261,19 +222,8 @@ class ConfigService {
 	}
 
 	/**
-	 * Remove leftover pre-mappings keys. Safe on disable/upgrade: keeps `mappings`.
-	 */
-	public function deleteLegacyFlatKeys(): int {
-		$leftover = self::leftoverLegacyKeys($this->config->getAppKeys(Application::APP_ID));
-		foreach ($leftover as $key) {
-			$this->config->deleteAppValue(Application::APP_ID, $key);
-		}
-		return count($leftover);
-	}
-
-	/**
-	 * Delete mappings and leftover IMAP settings. Does not remove imported files
-	 * and does not touch Nextcloud's `enabled` / `installed_version` keys.
+	 * Delete mappings. Does not remove imported files and does not touch
+	 * Nextcloud's `enabled` / `installed_version` / `types` keys.
 	 *
 	 * @return list<string> deleted keys
 	 */
@@ -316,8 +266,7 @@ class ConfigService {
 	 * @return list<array<string, mixed>>
 	 */
 	private function readMappingsUnlocked(): array {
-		$this->migrateLegacyIfNeededUnlocked();
-		$this->deleteLegacyFlatKeys();
+		$this->ensureDefaultMappingUnlocked();
 		$raw = $this->get(self::MAPPINGS_KEY, '[]');
 		$decoded = json_decode($raw, true);
 		if (!is_array($decoded)) {
@@ -452,16 +401,14 @@ class ConfigService {
 		return $mapping;
 	}
 
-	private function migrateLegacyIfNeededUnlocked(): void {
+	private function ensureDefaultMappingUnlocked(): void {
 		$existing = $this->get(self::MAPPINGS_KEY, '');
 		if ($existing !== '' && $existing !== '[]') {
 			return;
 		}
 
-		$host = $this->get('imap_host', '');
-		$user = $this->get('imap_user', '');
-		if ($host === '' && $user === '' && $this->get('imap_password', '') === '') {
-			$mapping = $this->normalizeMapping([
+		$this->persistMappingsUnlocked([
+			$this->normalizeMapping([
 				'id' => $this->newId(),
 				'name' => $this->l10n->t('Default'),
 				'fetch_enabled' => false,
@@ -476,38 +423,8 @@ class ConfigService {
 				'mark_as_seen' => true,
 				'delete_after_import' => false,
 				'max_attachment_bytes' => 26214400,
-			]);
-			$this->persistMappingsUnlocked([$mapping]);
-			return;
-		}
-
-		$mapping = $this->normalizeMapping([
-			'id' => $this->newId(),
-			'name' => $this->l10n->t('Default'),
-			'fetch_enabled' => $this->get('fetch_enabled', '0') === '1',
-			'imap_host' => $this->get('imap_host', ''),
-			'imap_port' => (int)$this->get('imap_port', '993'),
-			'imap_encryption' => $this->get('imap_encryption', 'ssl'),
-			'imap_validate_cert' => true,
-			'imap_user' => $this->get('imap_user', ''),
-			'imap_folder' => $this->get('imap_folder', 'INBOX'),
-			'target_user' => $this->get('target_user', 'admin'),
-			'target_path' => $this->get('target_path', '/Mail-Anhänge'),
-			'mark_as_seen' => $this->get('mark_as_seen', '1') === '1',
-			'delete_after_import' => $this->get('delete_after_import', '0') === '1',
-			'subject_filter' => $this->get('subject_filter', ''),
-			'sender_filter' => $this->get('sender_filter', ''),
-			'max_attachment_bytes' => 26214400,
-			'last_uid' => (int)$this->get('last_uid', '0'),
-			'last_run' => $this->get('last_run', ''),
-			'last_status' => $this->get('last_status', ''),
-			'last_error' => $this->get('last_error', ''),
+			]),
 		]);
-		$legacyPassword = $this->get('imap_password', '');
-		if ($legacyPassword !== '') {
-			$mapping['imap_password'] = $legacyPassword;
-		}
-		$this->persistMappingsUnlocked([$mapping]);
 	}
 
 	private function toBool(mixed $value): bool {
