@@ -59,7 +59,9 @@ jobs:
         run: |
           set -euo pipefail
           archive="dist/maildrop-${{ steps.version.outputs.version }}.tar.gz"
-          tar -tzf "$archive" | grep -qx 'maildrop/appinfo/signature.json'
+          # Do not pipe into grep -q: it closes early and tar exits with a write error.
+          tar -tzf "$archive" > /tmp/archive-files.txt
+          grep -qx 'maildrop/appinfo/signature.json' /tmp/archive-files.txt
 
       - name: Attach archive to the GitHub release
         uses: softprops/action-gh-release@v2
