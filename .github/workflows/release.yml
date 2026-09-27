@@ -1,0 +1,85 @@
+name: Publish release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Sign, attach archive, upload to App Store
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP / Composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          tools: composer
+          coverage: none
+
+      - name: Require tag to match info.xml
+        id: version
+        run: |
+          set -euo pipefail
+          ver="$(sed -nE 's/.*<version>([^<]+)<\/version>.*/\1/p' apps/maildrop/appinfo/info.xml | head -n1)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "$tag" != "$ver" ]]; then
+            echo "Release tag ${GITHUB_REF_NAME} does not match info.xml version ${ver}." >&2
+            echo "Tag the commit as v${ver}, or bump info.xml before publishing." >&2
+            exit 1
+          fi
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Write signing certificate and key
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_PUBLIC_CRT: ${{ secrets.APP_PUBLIC_CRT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.nextcloud/certificates"
+          printf '%s\n' "$APP_PRIVATE_KEY" > "$HOME/.nextcloud/certificates/maildrop.key"
+          printf '%s\n' "$APP_PUBLIC_CRT" > "$HOME/.nextcloud/certificates/maildrop.crt"
+          grep -q 'BEGIN \(RSA \)\?PRIVATE KEY' "$HOME/.nextcloud/certificates/maildrop.key"
+          grep -q 'BEGIN CERTIFICATE' "$HOME/.nextcloud/certificates/maildrop.crt"
+
+      - name: Build signed archive
+        env:
+          MAILDROP_SIGN_WITH_DOCKER: "1"
+        run: ./scripts/build-release.sh
+
+      - name: Require code signature inside the archive
+        run: |
+          set -euo pipefail
+          archive="dist/maildrop-${{ steps.version.outputs.version }}.tar.gz"
+          tar -tzf "$archive" | grep -qx 'maildrop/appinfo/signature.json'
+
+      - name: Attach archive to the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            dist/maildrop-${{ steps.version.outputs.version }}.tar.gz
+            dist/maildrop-${{ steps.version.outputs.version }}.tar.gz.sha256
+
+      - name: Upload release to the Nextcloud App Store
+        uses: R0Wi/nextcloud-appstore-push-action@v1
+        with:
+          app_name: maildrop
+          appstore_token: ${{ secrets.APPSTORE_TOKEN }}
+          download_url: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/maildrop-${{ steps.version.outputs.version }}.tar.gz
+          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          nightly: ${{ github.event.release.prerelease }}
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -rf "$HOME/.nextcloud/certificates"
+          rm -f maildrop.key maildrop.tar.gz

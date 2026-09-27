@@ -95,6 +95,57 @@ if [[ ! -f "$STAGE/$APP_ID/vendor/autoload.php" ]]; then
 	exit 1
 fi
 
+# Throwaway Nextcloud just to run `occ integrity:sign-app` (GitHub Actions).
+sign_with_oneshot_nextcloud() {
+	local staged="$1"
+	local key="$2"
+	local crt="$3"
+	local image="${NEXTCLOUD_SIGN_IMAGE:-nextcloud:34-apache}"
+	signer_name="maildrop-sign-$$"
+
+	cleanup_signer() {
+		docker rm -f "$signer_name" >/dev/null 2>&1 || true
+	}
+	trap cleanup_signer EXIT
+
+	echo "==> starting signer container ($image)"
+	docker rm -f "$signer_name" >/dev/null 2>&1 || true
+	docker run -d --name "$signer_name" \
+		-e SQLITE_DATABASE=nextcloud \
+		-e NEXTCLOUD_ADMIN_USER=admin \
+		-e NEXTCLOUD_ADMIN_PASSWORD=admin \
+		"$image" >/dev/null
+
+	local ready=0
+	local attempt
+	for attempt in $(seq 1 60); do
+		if docker exec -u www-data "$signer_name" php occ status 2>/dev/null | grep -q 'installed: true'; then
+			ready=1
+			break
+		fi
+		sleep 5
+	done
+	if [[ "$ready" != 1 ]]; then
+		docker logs --tail 80 "$signer_name" >&2 || true
+		echo "error: signer Nextcloud did not finish installing" >&2
+		exit 1
+	fi
+
+	docker exec -u root "$signer_name" mkdir -p /tmp/sign-src /sign-app
+	docker cp "$staged/." "$signer_name:/tmp/sign-src/"
+	docker cp "$key" "$signer_name:/tmp/maildrop.key"
+	docker cp "$crt" "$signer_name:/tmp/maildrop.crt"
+	docker exec -u root "$signer_name" bash -c 'rm -rf /sign-app && mv /tmp/sign-src /sign-app && chown -R www-data:www-data /sign-app /tmp/maildrop.key /tmp/maildrop.crt && chmod 600 /tmp/maildrop.key'
+	docker exec -u www-data "$signer_name" php occ integrity:sign-app \
+		--privateKey=/tmp/maildrop.key \
+		--certificate=/tmp/maildrop.crt \
+		--path=/sign-app
+	docker cp "$signer_name:/sign-app/appinfo/signature.json" "$staged/appinfo/signature.json"
+	docker exec -u root "$signer_name" rm -f /tmp/maildrop.key /tmp/maildrop.crt || true
+	cleanup_signer
+	trap - EXIT
+}
+
 sign_staged_app() {
 	local cert_dir="${MAILDROP_CERT_DIR:-$HOME/.nextcloud/certificates}"
 	local key="$cert_dir/${APP_ID}.key"
@@ -117,6 +168,8 @@ sign_staged_app() {
 			--privateKey="$key" \
 			--certificate="$crt" \
 			--path="$staged"
+	elif [[ "${MAILDROP_SIGN_WITH_DOCKER:-}" == "1" ]]; then
+		sign_with_oneshot_nextcloud "$staged" "$key" "$crt"
 	elif docker compose -f "$ROOT/docker-compose.yml" ps --status running --services 2>/dev/null | grep -qx nextcloud; then
 		docker compose -f "$ROOT/docker-compose.yml" run --rm --no-deps \
 			-v "$cert_dir:/certs:ro" \
@@ -128,7 +181,8 @@ sign_staged_app() {
 				--path=/sign-app
 	else
 		echo "error: certificates found but cannot sign." >&2
-		echo "  Set OCC=/path/to/nextcloud/occ, start docker compose (nextcloud), or SKIP_SIGN=1" >&2
+		echo "  Set OCC=/path/to/nextcloud/occ, start docker compose (nextcloud)," >&2
+		echo "  MAILDROP_SIGN_WITH_DOCKER=1, or SKIP_SIGN=1" >&2
 		exit 1
 	fi
 

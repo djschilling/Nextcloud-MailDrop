@@ -60,6 +60,12 @@ Output: `dist/maildrop-<version>.tar.gz` (includes `vendor/`) and optional `.sha
 
 If `~/.nextcloud/certificates/maildrop.key` and `maildrop.crt` exist, the script signs the staged app (`appinfo/signature.json`) via `OCC=…` or a running Docker Nextcloud. Use `SKIP_SIGN=1` to build an unsigned archive. Do not commit the private key or `signature.json`.
 
+### Publish via GitHub
+
+Publishing a GitHub release with tag `vX.Y.Z` (same version as `info.xml`) runs [`.github/workflows/release.yml`](.github/workflows/release.yml). It builds a signed archive, attaches `maildrop-X.Y.Z.tar.gz` to that release, and uploads it to the App Store.
+
+Repository Actions secrets: `APP_PRIVATE_KEY`, `APP_PUBLIC_CRT`, `APPSTORE_TOKEN`. The app must already be registered on apps.nextcloud.com. A GitHub pre-release is published as a nightly on the store.
+
 ## Configuration (admin UI)
 
 Each **mapping** connects one IMAP mailbox to one Nextcloud target:

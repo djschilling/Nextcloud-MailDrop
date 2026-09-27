@@ -218,7 +218,7 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 | New occ command | `lib/Command/`, register in `info.xml`, bump version |
 | Dependencies | Commit `composer.json` / `composer.lock`, not `vendor/` |
 | Broken CI install | Bind-mount vs `docker-compose.ci.yml`; `compose cp` |
-| Release | bump `info.xml` + `CHANGELOG.md`, `build-release.sh`, GitHub tag `vX.Y.Z` |
+| Release | bump `info.xml` + `CHANGELOG.md`, publish GitHub release `vX.Y.Z` (workflow signs and uploads) |
 
 ## Releases
 
@@ -230,7 +230,9 @@ docker compose exec -u www-data nextcloud tail -n 80 /var/www/html/data/nextclou
 - Archive root must be `maildrop/`
 - Include `vendor/`, `l10n/`, `LICENSE`, `CHANGELOG.md`, `img/`
 - GitHub release tag `vX.Y.Z` must match `info.xml` version
-- App Store: sign with `~/.nextcloud/certificates/maildrop.{key,crt}` (never commit); `build-release.sh` writes `appinfo/signature.json` into the staged archive only
+- Publishing that GitHub release runs `.github/workflows/release.yml` (signs via a throwaway Nextcloud container, attaches the tarball, uploads to the App Store)
+- Secrets (repository Actions secrets, never commit): `APP_PRIVATE_KEY`, `APP_PUBLIC_CRT`, `APPSTORE_TOKEN`
+- Local signing still works with `~/.nextcloud/certificates/maildrop.{key,crt}`; `build-release.sh` writes `appinfo/signature.json` into the staged archive only
 - Do not put server install helpers with secrets into this repo
 
 ## Do not
