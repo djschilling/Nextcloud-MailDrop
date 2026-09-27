@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+
+- App Store listing: screenshots at 1920×1080, category integration, discussion link
+
 ## 1.1.4
 
 - App Store listing: Nextcloud 28–35, store description (en/de), admin screenshots, app icon

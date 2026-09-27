@@ -53,7 +53,7 @@ Importierte Dateien bleiben beim Deaktivieren der App erhalten. Mappings und IMA
 - PHP 8.1 oder neuer (im von Ihrer Nextcloud unterstützten Bereich)
 - Ausgehender IMAP-Zugriff und ein funktionierender System-Cron für den Hintergrundjob
 	]]></description>
-	<version>1.1.4</version>
+	<version>1.1.5</version>
 	<licence>MIT</licence>
 	<author mail="davejs92@gmail.com" homepage="https://github.com/djschilling">David Schilling</author>
 	<namespace>MailDrop</namespace>
@@ -62,13 +62,14 @@ Importierte Dateien bleiben beim Deaktivieren der App erhalten. Mappings und IMA
 		<admin>https://github.com/djschilling/Nextcloud-MailDrop#configuration-admin-ui</admin>
 		<developer>https://github.com/djschilling/Nextcloud-MailDrop#project-structure</developer>
 	</documentation>
-	<category>files</category>
+	<category>integration</category>
 	<category>organization</category>
 	<website>https://github.com/djschilling/Nextcloud-MailDrop</website>
+	<discussion>https://github.com/djschilling/Nextcloud-MailDrop/discussions</discussion>
 	<bugs>https://github.com/djschilling/Nextcloud-MailDrop/issues</bugs>
 	<repository type="git">https://github.com/djschilling/Nextcloud-MailDrop.git</repository>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-admin-thumb.png">https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-admin.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-folders.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-admin-thumb.jpg">https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-admin.jpg</screenshot>
+	<screenshot>https://raw.githubusercontent.com/djschilling/Nextcloud-MailDrop/main/apps/maildrop/img/screenshot-folders.jpg</screenshot>
 	<dependencies>
 		<php min-version="8.1"/>
 		<nextcloud min-version="28" max-version="35"/>

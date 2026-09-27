@@ -99,7 +99,7 @@ SMTP → GreenMail → MailDrop (IMAP poll) → Nextcloud Files
 | `lib/Controller/ConfigController.php` | REST API for admin UI |
 | `lib/Settings/` | Admin section + form (`Util::addTranslations`) |
 | `img/app.svg` | Settings / Apps icon |
-| `img/screenshot-*.png` | App Store screenshots (HTTPS URLs in `info.xml`) |
+| `img/screenshot-*.jpg` | App Store screenshots (HTTPS URLs in `info.xml`) |
 | `js/admin.js` / `css/admin.css` | Settings UI (`t('maildrop', …)`) |
 | `l10n/*.json` / `l10n/*.js` | Translations (`en`, `de`); keep both `.json` and `.js` in sync |
 | `CHANGELOG.md` / `LICENSE` | App Store / release metadata |
